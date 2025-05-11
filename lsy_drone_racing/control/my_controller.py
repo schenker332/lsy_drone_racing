@@ -32,7 +32,7 @@ class TrajectoryController(Controller):
             [-0.5, -0.2,1.11 ]
         ])
 
-        self.t_total = 9
+        self.t_total = 8
         t = np.linspace(0, self.t_total, len(waypoints))
         self.trajectory = CubicSpline(t, waypoints)
         self._tick = 0
