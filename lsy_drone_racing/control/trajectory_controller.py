@@ -10,14 +10,10 @@ At each time step, the controller computes the next desired position by evaluati
 """
 
 from __future__ import annotations  # Python 3.10 type hints
-
 from typing import TYPE_CHECKING
-
 import numpy as np
 from scipy.interpolate import CubicSpline
-
 from lsy_drone_racing.control import Controller
-
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
@@ -39,7 +35,7 @@ class TrajectoryController(Controller):
         # Same waypoints as in the trajectory controller. Determined by trial and error.
         waypoints = np.array(
             [
-                [1.0, 1.5, 0.05],
+                [1.0, 1.5, 0.3],
                 [0.8, 1.0, 0.2],
                 [0.55, -0.3, 0.5],
                 [0.2, -1.3, 0.65],

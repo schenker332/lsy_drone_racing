@@ -8,25 +8,25 @@ Look for instructions in `README.md` and in the official documentation.
 """
 
 from __future__ import annotations
-
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
-
 import fire
 import gymnasium
 from gymnasium.wrappers.jax_to_numpy import JaxToNumpy
-
 from lsy_drone_racing.utils import load_config, load_controller
-
+from scripts.plotting import plot_3d
 if TYPE_CHECKING:
     from ml_collections import ConfigDict
 
     from lsy_drone_racing.control.controller import Controller
     from lsy_drone_racing.envs.drone_race import DroneRaceEnv
-
-
 logger = logging.getLogger(__name__)
+import matplotlib as plt
+
+
+
+
 
 
 def simulate(
@@ -41,7 +41,7 @@ def simulate(
         config: The path to the configuration file. Assumes the file is in `config/`.
         controller: The name of the controller file in `lsy_drone_racing/control/` or None. If None,
             the controller specified in the config file is used.
-        n_runs: The number of episodes.
+        n_runs: The number of episode
         gui: Enable/disable the simulation GUI.
 
     Returns:
@@ -101,9 +101,11 @@ def simulate(
         controller.episode_reset()
         ep_times.append(curr_time if obs["target_gate"] == -1 else None)
 
-    # Close the environment
     env.close()
-    return ep_times
+    return ep_times#, controller._saved_trajectory#, controller._best_path, controller._best_obs, controller.trajectory, controller.t_total, controller._best_time, controller._waypoints, controller._gate_log, controller._obstacle_log, controller._saved_trajectroy  #########geändert
+
+
+
 
 
 def log_episode_stats(obs: dict, info: dict, config: ConfigDict, curr_time: float):
@@ -117,8 +119,14 @@ def log_episode_stats(obs: dict, info: dict, config: ConfigDict, curr_time: floa
     )
 
 
+
+
 if __name__ == "__main__":
+
+
     logging.basicConfig()
     logging.getLogger("lsy_drone_racing").setLevel(logging.INFO)
     logger.setLevel(logging.INFO)
-    fire.Fire(simulate, serialize=lambda _: None)
+    ep_times= fire.Fire(simulate, serialize=lambda _: None) 
+
+    input("enter sth")
