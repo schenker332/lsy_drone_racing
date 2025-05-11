@@ -107,9 +107,6 @@ class TrajectoryController(Controller):
                 self._gate_log[i].append((self._tick, gate.copy(),obs["gates_quat"][i].copy()))
 
 
-
-
-
         # ===== updated obstacles =====
         if not self._last_obstacle:
             for i, obs_pos in enumerate(obs["obstacles_pos"]):
