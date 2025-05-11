@@ -6,13 +6,7 @@ from lsy_drone_racing.control import Controller
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
-from lsy_drone_racing.control.print_output import print_output
-
-import pyqtgraph as pg
-import pyqtgraph.opengl as gl
-from pyqtgraph.Qt import QtWidgets, QtCore
-
-from scripts.plotting import plot_3d
+# from scripts.plotting import plot_3d
 
 
 
@@ -42,7 +36,7 @@ class TrajectoryController(Controller):
 
         ])
 
-        self.t_total = 2
+        self.t_total = 9
         t = np.linspace(0, self.t_total, len(waypoints))
         self.trajectory = CubicSpline(t, waypoints)
         self._tick = 0
@@ -137,7 +131,7 @@ class TrajectoryController(Controller):
         self._tick += 1
         self._info = obs
         self._path_log.append(obs["pos"].copy())  # Position speichern
-        
+
         self.get_obs(obs, info)
 
         return self._finished
@@ -159,7 +153,7 @@ class TrajectoryController(Controller):
             "obstacle_log": self._obstacle_log
         })
 
-        plot_3d(self._saved_trajectory[-1])
+        # plot_3d(self._saved_trajectory[-1])
 
 
 
