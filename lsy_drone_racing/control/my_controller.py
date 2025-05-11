@@ -32,7 +32,7 @@ class TrajectoryController(Controller):
             [-0.5, -0.2,1.11 ]
         ])
 
-        self.t_total = 8
+        self.t_total = 9
         t = np.linspace(0, self.t_total, len(waypoints))
         self.trajectory = CubicSpline(t, waypoints)
         self._tick = 0
@@ -60,8 +60,6 @@ class TrajectoryController(Controller):
 
 
 
-    
-
     def compute_control(self, obs: dict[str, NDArray[np.floating]], info: dict | None = None) -> NDArray[np.floating]:
     
 
@@ -83,7 +81,7 @@ class TrajectoryController(Controller):
             self._finished = True
         return np.concatenate((target_pos, np.zeros(10)), dtype=np.float32)
     
-     
+    
 
     def get_obs(self, obs: dict[str, NDArray[np.floating]], info: dict | None = None):
 
@@ -120,8 +118,6 @@ class TrajectoryController(Controller):
 
 
 
-
-
     def step_callback(self,action: NDArray[np.floating],obs: dict[str, NDArray[np.floating]],reward: float,terminated: bool,truncated: bool,info: dict,) -> bool:
         self._tick += 1
         self._info = obs
@@ -130,7 +126,6 @@ class TrajectoryController(Controller):
         self.get_obs(obs, info)
 
         return self._finished
-
 
 
     def episode_callback(self):
@@ -147,8 +142,6 @@ class TrajectoryController(Controller):
             "gate_log": self._gate_log,
             "obstacle_log": self._obstacle_log
         })
-
-
 
 
 
