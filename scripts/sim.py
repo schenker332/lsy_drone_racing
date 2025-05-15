@@ -22,7 +22,8 @@ if TYPE_CHECKING:
     from lsy_drone_racing.control.controller import Controller
     from lsy_drone_racing.envs.drone_race import DroneRaceEnv
 logger = logging.getLogger(__name__)
-import matplotlib as plt
+import warnings
+warnings.filterwarnings("ignore", message="Explicitly requested dtype float64.*")
 
 
 
@@ -102,7 +103,7 @@ def simulate(
         ep_times.append(curr_time if obs["target_gate"] == -1 else None)
 
     env.close()
-    return ep_times#, controller._saved_trajectory#, controller._best_path, controller._best_obs, controller.trajectory, controller.t_total, controller._best_time, controller._waypoints, controller._gate_log, controller._obstacle_log, controller._saved_trajectroy  #########geändert
+    return ep_times
 
 
 

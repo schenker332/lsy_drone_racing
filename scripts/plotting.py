@@ -2,9 +2,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from scipy.spatial.transform import Rotation as R
-import pickle
-import os
-import matplotlib.pyplot as plt
 from numpy import array, linspace
 
 
@@ -95,7 +92,6 @@ def draw_gate(ax, center, quat, inner_size=0.45, outer_size=0.55, depth=0.05, co
 
 
 def plot_3d(run: dict):
-
 
     fig = plt.figure()
     fig.set_size_inches(10, 8)
