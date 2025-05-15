@@ -15,7 +15,6 @@ import fire
 import gymnasium
 from gymnasium.wrappers.jax_to_numpy import JaxToNumpy
 from lsy_drone_racing.utils import load_config, load_controller
-from scripts.plotting import plot_3d
 if TYPE_CHECKING:
     from ml_collections import ConfigDict
 
