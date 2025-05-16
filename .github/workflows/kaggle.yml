@@ -11,7 +11,6 @@ jobs:
   online-competition:
     if: ${{ github.repository != 'utiasDSL/lsy_drone_racing' }}
     runs-on: ubuntu-latest
-
     env:
       KAGGLE_USERNAME: ${{ secrets.KaggleUsername }}
       KAGGLE_KEY: ${{ secrets.KaggleKey }}
@@ -28,32 +27,27 @@ jobs:
           create-args: python=3.12
           cache-environment: true
 
-      # Clone acados and install acados_template
-      - name: Clone and install acados_template
-        run: |
-          git clone --depth 1 https://github.com/acados/acados.git
-          pip install ./acados/interfaces/acados_template
-        shell: micromamba-shell {0}
-
-      # Download and install tera renderer for template generation
-      - name: Install tera template renderer
-        run: |
-          mkdir -p /usr/local/bin
-          curl -L https://github.com/acados/tera_renderer/releases/download/v0.0.34/t_renderer-v0.0.34-linux -o /usr/local/bin/t_renderer
-          chmod +x /usr/local/bin/t_renderer
-        shell: micromamba-shell {0}
-
-      # Install your repo (with optional deps)
-      - name: Install lsy_drone_racing package
+      - name: Install Python dependencies
         run: pip install .[online_submission,test]
         shell: micromamba-shell {0}
 
-      # Run simulation
+      - name: Install acados_template module
+        run: |
+          cd acados/interfaces/acados_template
+          pip install .
+        shell: micromamba-shell {0}
+
+      - name: Install tera template renderer
+        run: |
+          mkdir -p $ACADOS_SOURCE_DIR/bin
+          curl -L https://github.com/acados/tera_renderer/releases/download/v0.0.34/t_renderer-v0.0.34-linux -o $ACADOS_SOURCE_DIR/bin/t_renderer
+          chmod +x $ACADOS_SOURCE_DIR/bin/t_renderer
+        shell: micromamba-shell {0}
+
       - name: Run simulation tests
         run: python scripts/kaggle.py
         shell: micromamba-shell {0}
 
-      # Submit to Kaggle
       - name: Export with kaggle
         run: kaggle competitions submit -c lsy-drone-racing-ss-25 -f submission.csv -m "Automated submission"
         shell: micromamba-shell {0}
