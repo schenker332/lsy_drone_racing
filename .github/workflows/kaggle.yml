@@ -7,7 +7,6 @@ on:
       - main
   workflow_dispatch:
 
-
 jobs:
   online-competition:
     if: ${{ github.repository != 'utiasDSL/lsy_drone_racing' }}
@@ -18,6 +17,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
       - uses: mamba-org/setup-micromamba@v1
         with:
           micromamba-version: '2.1.0-0'
@@ -26,13 +26,27 @@ jobs:
           create-args: python=3.12
           cache-environment: true
 
-      - run: pip install .[online_submission,test]
+      # ⬇️ Acados klonen & bauen
+      - name: Clone and build acados
+        run: |
+          git clone --recursive https://github.com/acados/acados.git
+          cd acados
+          mkdir build
+          cd build
+          cmake ..
+          make -j2
         shell: micromamba-shell {0}
 
+      # ⬇️ acados_template installieren
       - name: Install acados_template module
         run: |
           cd acados/interfaces/acados_template
           pip install .
+        shell: micromamba-shell {0}
+
+      # ⬇️ dein Projekt installieren
+      - name: Install project
+        run: pip install .[online_submission,test]
         shell: micromamba-shell {0}
 
       - name: Run simulation tests
