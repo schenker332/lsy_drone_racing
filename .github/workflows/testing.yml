@@ -14,12 +14,19 @@ jobs:
           init-shell: bash
           create-args: python=3.10
           cache-environment: true
+
       - name: Install dependencies and package
         run: pip install .
         shell: micromamba-shell {0}
+
+      - name: Install acados_template module
+        run: |
+          cd acados/interfaces/acados_template
+          pip install .
+        shell: micromamba-shell {0}
+
       - name: Test with pytest
         run: |
           pip install pytest pytest-cov
           pytest tests --cov=lsy_drone_racing 
         shell: micromamba-shell {0}
-      
