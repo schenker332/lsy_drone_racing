@@ -7,10 +7,7 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
 from scripts.plotting import plot_3d
-from lsy_drone_racing.control.utils_debug import gate_intersection
-# ganz oben im File ergänzen
-import json
-from pathlib import Path
+
 
 
 class TrajectoryController(Controller):

@@ -506,10 +506,12 @@ class MPController(Controller):
         return self.finished
 
 
-    def episode_callback(self):
+    def episode_callback(self, curr_time: float = None):
 
         t = np.linspace(0, self._des_completion_time, len(self.x_des))
         trajectory = CubicSpline(t, np.stack([self.x_des, self.y_des, self.z_des], axis=1))
+
+
 
         self._saved_trajectory.append({
             "flown_path": np.array(self._path_log),
@@ -517,7 +519,7 @@ class MPController(Controller):
             "gates": self._info.get("gates_pos", []).copy(),
             "gates_quat": self._info.get("gates_quat", []).copy(),
             "obstacles": self._info.get("obstacles_pos", []).copy(),
-            "time": self._tick / self.freq,
+            "time": curr_time,
             "t_total": self._des_completion_time,
             "waypoints": self._waypoints.copy(),
             "gate_log": self._gate_log,

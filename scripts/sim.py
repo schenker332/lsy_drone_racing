@@ -14,6 +14,8 @@ from typing import TYPE_CHECKING
 import fire
 import gymnasium
 from gymnasium.wrappers.jax_to_numpy import JaxToNumpy
+
+
 from lsy_drone_racing.utils import load_config, load_controller
 if TYPE_CHECKING:
     from ml_collections import ConfigDict
@@ -96,7 +98,7 @@ def simulate(
                     env.render()
             i += 1
 
-        controller.episode_callback()  # Update the controller internal state and models.
+        controller.episode_callback(curr_time)  # Update the controller internal state and models.
         log_episode_stats(obs, info, config, curr_time)
         controller.episode_reset()
         ep_times.append(curr_time if obs["target_gate"] == -1 else None)
