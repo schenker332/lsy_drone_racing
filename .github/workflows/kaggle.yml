@@ -11,19 +11,18 @@ jobs:
   online-competition:
     if: ${{ github.repository != 'utiasDSL/lsy_drone_racing' }}
     runs-on: ubuntu-latest
-
     env:
       KAGGLE_USERNAME: ${{ secrets.KaggleUsername }}
       KAGGLE_KEY: ${{ secrets.KaggleKey }}
-      ACADOS_SOURCE_DIR: ${{ github.workspace }}/acados  # Wichtig für acados_template
+      ACADOS_SOURCE_DIR: ${{ github.workspace }}/acados  # wichtig für acados_template!
 
     steps:
-      - name: Checkout repo including submodules
+      - name: Checkout repository with submodules
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Setup micromamba Python
+      - name: Set up micromamba environment
         uses: mamba-org/setup-micromamba@v1
         with:
           micromamba-version: '2.1.0-0'
@@ -32,28 +31,27 @@ jobs:
           create-args: python=3.12
           cache-environment: true
 
-      - name: Install acados_template
-        run: |
-          pip install ./acados/interfaces/acados_template
-        shell: micromamba-shell {0}
-
       - name: Install Python dependencies
-        run: |
-          pip install .[online_submission,test]
-          pip install pytest pytest-cov
+        run: pip install .[online_submission,test]
         shell: micromamba-shell {0}
 
-      - name: Download and install Tera renderer
+      - name: Build acados C libraries
         run: |
-          mkdir -p $ACADOS_SOURCE_DIR/bin
-          wget -q https://github.com/acados/tera_renderer/releases/download/v0.0.34/t_renderer-v0.0.34-linux -O $ACADOS_SOURCE_DIR/bin/t_renderer
-          chmod +x $ACADOS_SOURCE_DIR/bin/t_renderer
+          cd acados
+          mkdir -p build
+          cd build
+          cmake .. -DACADOS_WITH_QPOASES=ON -DCMAKE_BUILD_TYPE=Release
+          make -j2
         shell: micromamba-shell {0}
 
-      - name: Run simulation (kaggle.py)
+      - name: Install acados_template
+        run: pip install ./acados/interfaces/acados_template
+        shell: micromamba-shell {0}
+
+      - name: Run simulation tests
         run: python scripts/kaggle.py
         shell: micromamba-shell {0}
 
-      - name: Submit to Kaggle
+      - name: Export to Kaggle
         run: kaggle competitions submit -c lsy-drone-racing-ss-25 -f submission.csv -m "Automated submission"
         shell: micromamba-shell {0}
