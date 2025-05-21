@@ -6,7 +6,7 @@ from scipy.spatial.transform import Rotation as R
 from lsy_drone_racing.control import Controller
 if TYPE_CHECKING:
     from numpy.typing import NDArray
-from scripts.plotting import plot_3d
+from lsy_drone_racing.control.plotting import plot_3d
 from lsy_drone_racing.control.create_ocp_solver import create_ocp_solver
 from lsy_drone_racing.control.print_output import print_output
 

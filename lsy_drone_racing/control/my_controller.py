@@ -6,7 +6,7 @@ from lsy_drone_racing.control import Controller
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
-from scripts.plotting import plot_3d
+from lsy_drone_racing.control.plotting import plot_3d
 
 
 
