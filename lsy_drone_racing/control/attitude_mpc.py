@@ -1,226 +1,15 @@
-"""This module implements an example MPC using attitude control for a quadrotor.
-
-It utilizes the collective thrust interface for drone control to compute control commands based on
-current state observations and desired waypoints.
-
-The waypoints are generated using cubic spline interpolation from a set of predefined waypoints.
-Note that the trajectory uses pre-defined waypoints instead of dynamically generating a good path.
-"""
-
-from __future__ import annotations  # Python 3.10 type hints
+from __future__ import annotations 
 from typing import TYPE_CHECKING
 import numpy as np
-import scipy
-from acados_template import AcadosModel, AcadosOcp, AcadosOcpSolver
-from casadi import MX, cos, sin, vertcat
 from scipy.interpolate import CubicSpline
 from scipy.spatial.transform import Rotation as R
 from lsy_drone_racing.control import Controller
 if TYPE_CHECKING:
     from numpy.typing import NDArray
+from scripts.plotting import plot_3d
+from lsy_drone_racing.control.create_ocp_solver import create_ocp_solver
+from lsy_drone_racing.control.print_output import print_output
 
-
-
-
-
-
-def export_quadrotor_ode_model() -> AcadosModel:
-    """Symbolic Quadrotor Model."""
-    # Define name of solver to be used in script
-    model_name = "lsy_example_mpc"
-
-    # Define Gravitational Acceleration
-    GRAVITY = 9.806
-
-    # Sys ID Params
-    params_pitch_rate = [-6.003842038081178, 6.213752925707588]
-    params_roll_rate = [-3.960889336015948, 4.078293254657104]
-    params_yaw_rate = [-0.005347588299390372, 0.0]
-    params_acc = [20.907574256269616, 3.653687545690674]
-
-    """Model setting"""
-    # define basic variables in state and input vector
-    px = MX.sym("px")  # 0
-    py = MX.sym("py")  # 1
-    pz = MX.sym("pz")  # 2
-    vx = MX.sym("vx")  # 3
-    vy = MX.sym("vy")  # 4
-    vz = MX.sym("vz")  # 5
-    roll = MX.sym("r")  # 6
-    pitch = MX.sym("p")  # 7
-    yaw = MX.sym("y")  # 8
-    f_collective = MX.sym("f_collective")
-
-    f_collective_cmd = MX.sym("f_collective_cmd")
-    r_cmd = MX.sym("r_cmd")
-    p_cmd = MX.sym("p_cmd")
-    y_cmd = MX.sym("y_cmd")
-
-    df_cmd = MX.sym("df_cmd")
-    dr_cmd = MX.sym("dr_cmd")
-    dp_cmd = MX.sym("dp_cmd")
-    dy_cmd = MX.sym("dy_cmd")
-
-    # define state and input vector
-    states = vertcat(
-        px,
-        py,
-        pz,
-        vx,
-        vy,
-        vz,
-        roll,
-        pitch,
-        yaw,
-        f_collective,
-        f_collective_cmd,
-        r_cmd,
-        p_cmd,
-        y_cmd,
-    )
-    inputs = vertcat(df_cmd, dr_cmd, dp_cmd, dy_cmd)
-
-    # Define nonlinear system dynamics
-    f = vertcat(
-        vx,
-        vy,
-        vz,
-        (params_acc[0] * f_collective + params_acc[1])
-        * (cos(roll) * sin(pitch) * cos(yaw) + sin(roll) * sin(yaw)),
-        (params_acc[0] * f_collective + params_acc[1])
-        * (cos(roll) * sin(pitch) * sin(yaw) - sin(roll) * cos(yaw)),
-        (params_acc[0] * f_collective + params_acc[1]) * cos(roll) * cos(pitch) - GRAVITY,
-        params_roll_rate[0] * roll + params_roll_rate[1] * r_cmd,
-        params_pitch_rate[0] * pitch + params_pitch_rate[1] * p_cmd,
-        params_yaw_rate[0] * yaw + params_yaw_rate[1] * y_cmd,
-        10.0 * (f_collective_cmd - f_collective),
-        df_cmd,
-        dr_cmd,
-        dp_cmd,
-        dy_cmd,
-    )
-
-    # Initialize the nonlinear model for NMPC formulation
-    model = AcadosModel()
-    model.name = model_name
-    model.f_expl_expr = f
-    model.f_impl_expr = None
-    model.x = states
-    model.u = inputs
-
-    return model
-
-
-
-
-def create_ocp_solver(
-    Tf: float, N: int, verbose: bool = False
-) -> tuple[AcadosOcpSolver, AcadosOcp]:
-    """Creates an acados Optimal Control Problem and Solver."""
-    ocp = AcadosOcp()
-
-    # set model
-    model = export_quadrotor_ode_model()
-    ocp.model = model
-
-    # Get Dimensions
-    nx = model.x.rows()
-    nu = model.u.rows()
-    ny = nx + nu
-    ny_e = nx
-
-    # Set dimensions
-    ocp.solver_options.N_horizon = N
-
-    ## Set Cost
-    # For more Information regarding Cost Function Definition in Acados: https://github.com/acados/acados/blob/main/docs/problem_formulation/problem_formulation_ocp_mex.pdf
-
-    # Cost Type
-    ocp.cost.cost_type = "LINEAR_LS"
-    ocp.cost.cost_type_e = "LINEAR_LS"
-
-    # Weights
-    Q = np.diag(
-        [
-            10.0,
-            10.0,
-            15.0,  # Position
-            0.01,
-            0.01,
-            0.01,  # Velocity
-            0.1,
-            0.1,
-            0.1,  # rpy
-            0.01,
-            0.01,  # f_collective, f_collective_cmd
-            0.01,
-            0.01,
-            0.01,
-        ]
-    )  # rpy_cmd
-
-    R = np.diag([0.01, 0.01, 0.01, 0.01])
-
-    Q_e = Q.copy()
-
-    ocp.cost.W = scipy.linalg.block_diag(Q, R)
-    ocp.cost.W_e = Q_e
-
-    Vx = np.zeros((ny, nx))
-    Vx[:nx, :] = np.eye(nx)  # Only select position states   18x14  I= 14x14 (oben)
-    ocp.cost.Vx = Vx
-
-    Vu = np.zeros((ny, nu))
-    Vu[nx : nx + nu, :] = np.eye(nu)  # Select all actions   18x4  I= 4x4 (unten)
-    ocp.cost.Vu = Vu
-
-    Vx_e = np.zeros((ny_e, nx))
-    Vx_e[:nx, :nx] = np.eye(nx)  # Only select position states  14x14  I= 14x14 
-    ocp.cost.Vx_e = Vx_e
-
-    # Set initial references (we will overwrite these later on to make the controller track the traj.)
-    # ocp.cost.yref = np.zeros((ny, ))
-    # ocp.cost.yref_e = np.zeros((ny_e, ))
-    ocp.cost.yref = np.array(
-        [1.0, 1.0, 0.4, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.35, 0.35, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-    )
-
-    ocp.cost.yref_e = np.array(
-        [1.0, 1.0, 0.4, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.35, 0.35, 0.0, 0.0, 0.0]
-    )
-
-    # Set State Constraints
-    ocp.constraints.lbx = np.array([0.1, 0.1, -1.57, -1.57, -1.57])
-    ocp.constraints.ubx = np.array([0.55, 0.55, 1.57, 1.57, 1.57])
-    ocp.constraints.idxbx = np.array([9, 10, 11, 12, 13])
-
-    # Set Input Constraints
-    # ocp.constraints.lbu = np.array([-10.0, -10.0, -10.0. -10.0])
-    # ocp.constraints.ubu = np.array([10.0, 10.0, 10.0, 10.0])
-    # ocp.constraints.idxbu = np.array([0, 1, 2, 3])
-
-    # We have to set x0 even though we will overwrite it later on.
-    ocp.constraints.x0 = np.zeros((nx))
-
-    # Solver Options
-    ocp.solver_options.qp_solver = "FULL_CONDENSING_HPIPM"  # FULL_CONDENSING_QPOASES
-    ocp.solver_options.hessian_approx = "GAUSS_NEWTON"
-    ocp.solver_options.integrator_type = "ERK"
-    ocp.solver_options.nlp_solver_type = "SQP"  # SQP_RTI
-    ocp.solver_options.tol = 1e-5
-
-    ocp.solver_options.qp_solver_cond_N = N
-    ocp.solver_options.qp_solver_warm_start = 1
-
-    ocp.solver_options.qp_solver_iter_max = 20
-    ocp.solver_options.nlp_solver_max_iter = 50
-
-    # set prediction horizon
-    ocp.solver_options.tf = Tf
-
-    acados_ocp_solver = AcadosOcpSolver(ocp, json_file="lsy_example_mpc.json", verbose=verbose)
-
-    return acados_ocp_solver, ocp
 
 
 class MPController(Controller):
@@ -239,24 +28,6 @@ class MPController(Controller):
         self.freq = config.env.freq
         self._tick = 0
 
-        # Same waypoints as in the trajectory controller. Determined by trial and error.
-        # waypoints = np.array(
-        #     [
-        #         [1.0, 1.5, 0.05],
-        #         [0.8, 1.0, 0.2],
-        #         [0.55, -0.3, 0.5], #1
-        #         [0.2, -1.3, 0.65],
-        #         [1.1, -0.85, 1.1], #2
-        #         [0.2, 0.5, 0.65],
-        #         [0.0, 1.2, 0.525],  #3
-        #         [0.0, 1.2, 1.1],
-        #         [-0.5, -0.1, 1.1], #4
-        #         [-0.5, -0.5, 1.1],
-        #     ]
-        # )
-
-
-
         waypoints = np.array(
         [
             [1.0, 1.5, 0.3],
@@ -272,9 +43,8 @@ class MPController(Controller):
             [-0.1,1.2, 0.56],
             [-0.3, 1.2, 1.1],
             [-0.2,0.4, 1.1 ],
-            [-0.5,   0,  1.11],#gate4
-            [-0.5, -0.2,1.11 ]
-
+            [-0.5,   -0.1,  1.11],#gate4
+     
 
 
         ])
@@ -322,13 +92,6 @@ class MPController(Controller):
         self._last_obstacle = []
         self._obstacle_log = []
 
-        # self._gate_to_wp_index = {
-        #     0: 2,
-        #     1: 4,
-        #     2: 6,
-        #     3: 8
-        # }   
-
 
         self._gate_to_wp_index = {
             0: 3,
@@ -360,6 +123,8 @@ class MPController(Controller):
         if self._tick > i:
             self.finished = True
 
+
+        print_output(obs, self._tick, self.freq)
         q = obs["quat"]
         r = R.from_quat(q)
         # Convert to Euler angles in XYZ order
@@ -381,7 +146,7 @@ class MPController(Controller):
         self.acados_ocp_solver.set(0, "ubx", xcurrent)
 
 
-
+        # ====== update waypoints =====
         for gate_id, seen in enumerate(obs["gates_visited"]):
             if seen and gate_id not in self._added_gates:
                 idx = self._gate_to_wp_index.get(gate_id)
@@ -407,52 +172,15 @@ class MPController(Controller):
 
 
 
-
         for j in range(self.N):
-            yref = np.array(
-                [
-                    self.x_des[i + j],
-                    self.y_des[i + j],
-                    self.z_des[i + j],
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.35,
-                    0.35,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                    0.0,
-                ]
-            )
+            yref = np.array([self.x_des[i + j], self.y_des[i + j], self.z_des[i + j], 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.35, 0.35, 0.0, 0.0,0.0, 0.0, 0.0, 0.0,0.0])
             self.acados_ocp_solver.set(j, "yref", yref)
 
-        yref_N = np.array(
-            [
-                self.x_des[i + self.N],
-                self.y_des[i + self.N],
-                self.z_des[i + self.N],
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.35,
-                0.35,
-                0.0,
-                0.0,
-                0.0,
-            ]
-        )
 
+        yref_N = np.array([self.x_des[i + self.N], self.y_des[i + self.N], self.z_des[i + self.N], 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.35, 0.35, 0.0, 0.0,0.0])
         self.acados_ocp_solver.set(self.N, "yref", yref_N)
+
+
 
         self.acados_ocp_solver.solve()
         x1 = self.acados_ocp_solver.get(1, "x")
@@ -506,10 +234,12 @@ class MPController(Controller):
         return self.finished
 
 
-    def episode_callback(self):
+    def episode_callback(self, curr_time: float = None):
 
         t = np.linspace(0, self._des_completion_time, len(self.x_des))
         trajectory = CubicSpline(t, np.stack([self.x_des, self.y_des, self.z_des], axis=1))
+
+
 
         self._saved_trajectory.append({
             "flown_path": np.array(self._path_log),
@@ -517,7 +247,7 @@ class MPController(Controller):
             "gates": self._info.get("gates_pos", []).copy(),
             "gates_quat": self._info.get("gates_quat", []).copy(),
             "obstacles": self._info.get("obstacles_pos", []).copy(),
-            "time": self._tick / self.freq,
+            "time": curr_time,
             "t_total": self._des_completion_time,
             "waypoints": self._waypoints.copy(),
             "gate_log": self._gate_log,
@@ -525,7 +255,7 @@ class MPController(Controller):
         })
 
 
-
+        plot_3d(self._saved_trajectory[-1])
 
 
 
@@ -533,4 +263,6 @@ class MPController(Controller):
         self._plotted_once = False
         self._path_log = []
         self._tick = 0  # Wichtig für Zeitmessung und nächste Episode
+
+
 

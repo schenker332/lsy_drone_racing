@@ -6,12 +6,14 @@ from lsy_drone_racing.control import Controller
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
+from scripts.plotting import plot_3d
 
 
 
 class TrajectoryController(Controller):
     
-    def __init__(self, obs: dict[str, NDArray[np.floating]], info: dict, config: dict):
+    def __init__(self, obs: dict[str, NDArray[np.floating]], info: dict, config: dict) -> None:
+
         super().__init__(obs, info, config)
         waypoints = np.array(
         [
@@ -32,7 +34,7 @@ class TrajectoryController(Controller):
             [-0.5, -0.2,1.11 ]
         ])
 
-        self.t_total = 9
+        self.t_total = 11
         t = np.linspace(0, self.t_total, len(waypoints))
         self.trajectory = CubicSpline(t, waypoints)
         self._tick = 0
@@ -62,8 +64,7 @@ class TrajectoryController(Controller):
 
     def compute_control(self, obs: dict[str, NDArray[np.floating]], info: dict | None = None) -> NDArray[np.floating]:
     
-
-
+        # print_output(obs, self._tick, self._freq)  # Ausgabe der Sensoren
         # == update of the gates ==
         for gate_id, seen in enumerate(obs["gates_visited"]):
             if seen and gate_id not in self._added_gates:
@@ -100,9 +101,6 @@ class TrajectoryController(Controller):
                 self._gate_log[i].append((self._tick, gate.copy(),obs["gates_quat"][i].copy()))
 
 
-
-
-
         # ===== updated obstacles =====
         if not self._last_obstacle:
             for i, obs_pos in enumerate(obs["obstacles_pos"]):
@@ -122,9 +120,7 @@ class TrajectoryController(Controller):
         self._tick += 1
         self._info = obs
         self._path_log.append(obs["pos"].copy())  # Position speichern
-
         self.get_obs(obs, info)
-
         return self._finished
 
 
@@ -143,6 +139,7 @@ class TrajectoryController(Controller):
             "obstacle_log": self._obstacle_log
         })
 
+        plot_3d(self._saved_trajectory[-1])
 
 
 

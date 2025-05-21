@@ -132,6 +132,10 @@ class AttitudeController(Controller):
         thrust_desired, euler_desired
         return np.concatenate([[thrust_desired], euler_desired], dtype=np.float32)
 
+
+
+
+
     def step_callback(
         self,
         action: NDArray[np.floating],
