@@ -6,9 +6,9 @@ from scipy.spatial.transform import Rotation as R
 from lsy_drone_racing.control import Controller
 if TYPE_CHECKING:
     from numpy.typing import NDArray
-from lsy_drone_racing.control.plotting import plot_3d
+
 from lsy_drone_racing.control.create_ocp_solver import create_ocp_solver
-from lsy_drone_racing.control.print_output import print_output
+
 
 
 
@@ -124,7 +124,7 @@ class MPController(Controller):
             self.finished = True
 
 
-        print_output(obs, self._tick, self.freq)
+
         q = obs["quat"]
         r = R.from_quat(q)
         # Convert to Euler angles in XYZ order
@@ -255,7 +255,7 @@ class MPController(Controller):
         })
 
 
-        plot_3d(self._saved_trajectory[-1])
+
 
 
 
