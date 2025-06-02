@@ -242,7 +242,25 @@ class MPController(Controller):
         self._path_log.append(obs["pos"].copy())  # Position speichern
         return self.finished
 
+    def episode_callback(self, curr_time: float = None):
+        """Callback function called once after each episode.
 
+        Args:
+        curr_time: Optional current time of the episode.
+        """
+        t = np.linspace(0, self._des_completion_time, len(self.x_des))
+        trajectory = CubicSpline(t, np.stack([self.x_des, self.y_des, self.z_des], axis=1))
+
+        self._saved_trajectory.append({
+        "flown_path": np.array(self._path_log),
+        "trajectory": trajectory,
+        "gates": self._info.get("gates_pos", []).copy(),
+        "gates_quat": self._info.get("gates_quat", []).copy(),
+        "obstacles": self._info.get("obstacles_pos", []).copy(),
+        "time": curr_time,
+        "t_total": self._des_completion_time,
+        "waypoints": self._waypoints.copy(),
+        })
 
 
 

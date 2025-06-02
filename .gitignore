@@ -11,3 +11,6 @@ saves
 **/*.csv
 plots/
 c_generated_code/
+.DS_Store
+/external/crazyflow/*
+!/external/crazyflow/.git

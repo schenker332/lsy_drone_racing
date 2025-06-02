@@ -1,3 +1,6 @@
 [submodule "acados"]
 	path = acados
 	url = https://github.com/acados/acados.git
+[submodule "external/crazyflow"]
+	path = external/crazyflow
+	url = https://github.com/utiasDSL/crazyflow.git
