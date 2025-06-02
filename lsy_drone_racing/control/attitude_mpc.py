@@ -6,7 +6,6 @@ from scipy.spatial.transform import Rotation as R
 from lsy_drone_racing.control import Controller
 if TYPE_CHECKING:
     from numpy.typing import NDArray
-from lsy_drone_racing.control.plotting import plot_3d
 from lsy_drone_racing.control.create_ocp_solver import create_ocp_solver
 from lsy_drone_racing.control.print_output import print_output
 
@@ -43,7 +42,12 @@ class MPController(Controller):
             [-0.1,1.2, 0.56],
             [-0.3, 1.2, 1.1],
             [-0.2,0.4, 1.1 ],
-            [-0.5,   -0.1,  1.11],#gate4
+            [-0.45, 0.1, 1.11],
+            [-0.5,   0,  1.11],#gate4
+            [-0.5, -0.2,1.11 ],
+     
+
+
      
 
 
@@ -54,22 +58,25 @@ class MPController(Controller):
         cs_y = CubicSpline(ts, waypoints[:, 1])
         cs_z = CubicSpline(ts, waypoints[:, 2])
 
+  
 
 
 
-        self._des_completion_time = 7
+
+        self._des_completion_time = 6
         ts = np.linspace(0, 1, int(self.freq * self._des_completion_time))
         self.x_des = cs_x(ts)
         self.y_des = cs_y(ts)
         self.z_des = cs_z(ts)
 
+        vis_s = np.linspace(0.0, 1.0, 700)  # Bereich [0,1] für konsistente Visualisierung
+        self.traj_points = np.column_stack((cs_x(vis_s), cs_y(vis_s), cs_z(vis_s)))
+
 
         self.N = 50
-        self.T_HORIZON = 1.5
+        self.T_HORIZON = 1.5    
         self.dt = self.T_HORIZON / self.N
-        self.x_des = np.concatenate((self.x_des, [self.x_des[-1]] * (2 * self.N + 1)))
-        self.y_des = np.concatenate((self.y_des, [self.y_des[-1]] * (2 * self.N + 1)))
-        self.z_des = np.concatenate((self.z_des, [self.z_des[-1]] * (2 * self.N + 1)))
+
 
 
         self.acados_ocp_solver, self.ocp = create_ocp_solver(self.T_HORIZON, self.N)
@@ -91,13 +98,16 @@ class MPController(Controller):
         self._gate_log = []
         self._last_obstacle = []
         self._obstacle_log = []
+        
+        # Speichere alle Versionen der Trajektorie, um sie in der Visualisierung anzeigen zu können
+        self._all_trajectories = [self.traj_points.copy()]
 
 
         self._gate_to_wp_index = {
             0: 3,
             1: 6,
             2: 9,
-            3: 13
+            3: 14
         }   
 
         self._added_gates = set()
@@ -164,21 +174,50 @@ class MPController(Controller):
                 self.x_des = cs_x(ts)
                 self.y_des = cs_y(ts)
                 self.z_des = cs_z(ts)
+                
+                # Aktualisiere auch die visuelle Trajektorie
+                vis_s = np.linspace(0.0, 1, 700)  # Hier nutzen wir denselben Bereich [0,1] wie bei ts
+                self.traj_points = np.column_stack((cs_x(vis_s), cs_y(vis_s), cs_z(vis_s)))
+                
+                # Speichere jede neue Trajektorie, damit wir alle Versionen visualisieren können
+                self._all_trajectories.append(self.traj_points.copy())
 
-                self.x_des = np.concatenate((self.x_des, [self.x_des[-1]] * (2 * self.N + 1)))
-                self.y_des = np.concatenate((self.y_des, [self.y_des[-1]] * (2 * self.N + 1)))
-                self.z_des = np.concatenate((self.z_des, [self.z_des[-1]] * (2 * self.N + 1)))
 
 
 
+
+        # Stelle sicher, dass wir nicht über die Grenzen der Arrays hinausgehen
+        # x_end = self.x_des[-1]
+        # y_end = self.y_des[-1]
+        # z_end = self.z_des[-1]
+        
+        # for j in range(self.N):
+        #     # Verwende den letzten Wert, wenn wir über die Grenzen hinausgehen würden
+        #     idx = min(i + j, len(self.x_des) - 1)
+        #     x_ref = self.x_des[idx]
+        #     y_ref = self.y_des[idx]
+        #     z_ref = self.z_des[idx]
+            
+        #     yref = np.array([x_ref, y_ref, z_ref, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.35, 0.35, 0.0, 0.0,0.0, 0.0, 0.0, 0.0,0.0])
+        #     self.acados_ocp_solver.set(j, "yref", yref)
+
+        # # Verwende den letzten Wert für den Terminal-Zustand
+        # yref_N = np.array([x_end, y_end, z_end, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.35, 0.35, 0.0, 0.0,0.0])
+        # self.acados_ocp_solver.set(self.N, "yref", yref_N)
 
         for j in range(self.N):
-            yref = np.array([self.x_des[i + j], self.y_des[i + j], self.z_des[i + j], 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.35, 0.35, 0.0, 0.0,0.0, 0.0, 0.0, 0.0,0.0])
+            idx = min(i + j, len(self.x_des) - 1)
+            yref = np.array([self.x_des[idx], self.y_des[idx], self.z_des[idx], 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.35, 0.35, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
             self.acados_ocp_solver.set(j, "yref", yref)
 
+            p_ref = np.array([self.x_des[idx], self.y_des[idx], self.z_des[idx]])
+            self.acados_ocp_solver.set(j, "p", p_ref)
 
-        yref_N = np.array([self.x_des[i + self.N], self.y_des[i + self.N], self.z_des[i + self.N], 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.35, 0.35, 0.0, 0.0,0.0])
+        idx_N = min(i + self.N, len(self.x_des) - 1)
+        yref_N = np.array([self.x_des[idx_N], self.y_des[idx_N], self.z_des[idx_N], 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.35, 0.35, 0.0, 0.0, 0.0])
         self.acados_ocp_solver.set(self.N, "yref", yref_N)
+        p_ref_N = np.array([self.x_des[idx_N], self.y_des[idx_N], self.z_des[idx_N]])
+        self.acados_ocp_solver.set(self.N, "p", p_ref_N)
 
 
 
@@ -195,67 +234,16 @@ class MPController(Controller):
 
 
 
-    def get_obs(self, obs: dict[str, NDArray[np.floating]], info: dict | None = None):
-
-        # ===== updated gates =====
-        if not self._last_gate:
-            for i,gate in enumerate(obs["gates_pos"]):
-                self._last_gate.append(gate.copy())  # list: [1.gate][2.gate][][]
-                self._gate_log.append([])
-                self._gate_log[i].append((self._tick, gate.copy(), obs["gates_quat"][i].copy()))   # list: [(T1)(T2)(T3)]  [][][]
-
-
-        for i, gate in enumerate(obs["gates_pos"]):
-            last_pos = self._last_gate[i]
-            if not np.allclose(gate, last_pos, atol= 1e-3):
-                self._last_gate[i] = gate.copy()
-                self._gate_log[i].append((self._tick, gate.copy(),obs["gates_quat"][i].copy()))
-
-
-        # ===== updated obstacles =====
-        if not self._last_obstacle:
-            for i, obs_pos in enumerate(obs["obstacles_pos"]):
-                self._last_obstacle.append(obs_pos.copy())
-                self._obstacle_log.append([])
-                self._obstacle_log[i].append((self._tick, obs_pos.copy()))
-
-        for i, obs_pos in enumerate(obs["obstacles_pos"]):
-            last_pos = self._last_obstacle[i]
-            if not np.allclose(obs_pos, last_pos, atol=1e-4):
-                self._last_obstacle[i] = obs_pos.copy()
-                self._obstacle_log[i].append((self._tick, obs_pos.copy()))
 
 
     def step_callback(self,action: NDArray[np.floating],obs: dict[str, NDArray[np.floating]],reward: float,terminated: bool,truncated: bool,info: dict,) -> bool:
         self._tick += 1
         self._info = obs
         self._path_log.append(obs["pos"].copy())  # Position speichern
-        self.get_obs(obs, info)
         return self.finished
 
 
-    def episode_callback(self, curr_time: float = None):
 
-        t = np.linspace(0, self._des_completion_time, len(self.x_des))
-        trajectory = CubicSpline(t, np.stack([self.x_des, self.y_des, self.z_des], axis=1))
-
-
-
-        self._saved_trajectory.append({
-            "flown_path": np.array(self._path_log),
-            "trajectory": trajectory,
-            "gates": self._info.get("gates_pos", []).copy(),
-            "gates_quat": self._info.get("gates_quat", []).copy(),
-            "obstacles": self._info.get("obstacles_pos", []).copy(),
-            "time": curr_time,
-            "t_total": self._des_completion_time,
-            "waypoints": self._waypoints.copy(),
-            "gate_log": self._gate_log,
-            "obstacle_log": self._obstacle_log
-        })
-
-
-        plot_3d(self._saved_trajectory[-1])
 
 
 
@@ -266,3 +254,29 @@ class MPController(Controller):
 
 
 
+    def get_trajectory(self) -> NDArray[np.floating]:
+        """Get the trajectory points."""
+        return self.traj_points
+        
+    def get_all_trajectories(self) -> list[NDArray[np.floating]]:
+        """Get all trajectory versions that were created throughout the simulation."""
+        return self._all_trajectories
+
+
+
+    def get_prediction_horizon(self) -> NDArray[np.floating]:
+        """Get the predicted position trajectory for the planning horizon.
+        
+        Returns:
+            Array of shape (N, 3) containing the predicted x,y,z positions
+            for the next N timesteps in the planning horizon.
+        """
+        # Sammle die vorhergesagten Zustände für alle Schritte im Horizont
+        horizon_positions = []
+        for i in range(self.N):
+            state = self.acados_ocp_solver.get(i, "x")
+            # Die ersten drei Elemente des Zustands sind die x,y,z-Positionen
+            pos = state[:3]
+            horizon_positions.append(pos)
+        
+        return np.array(horizon_positions)

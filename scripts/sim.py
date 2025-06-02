@@ -14,9 +14,12 @@ from typing import TYPE_CHECKING
 import fire
 import gymnasium
 from gymnasium.wrappers.jax_to_numpy import JaxToNumpy
+import numpy as np
 
 
-from lsy_drone_racing.utils import load_config, load_controller
+from lsy_drone_racing.utils import draw_line, load_config, load_controller, draw_gates, draw_point, draw_obstacles, generate_parallel_lines
+from lsy_drone_racing.utils.visualizer import SimVisualizer
+
 if TYPE_CHECKING:
     from ml_collections import ConfigDict
 
@@ -74,36 +77,71 @@ def simulate(
     env = JaxToNumpy(env)
 
     ep_times = []
-    for _ in range(n_runs):  # Run n_runs episodes with the controller
-        obs, info = env.reset()
-        controller: Controller = controller_cls(obs, info, config)
-        i = 0
-        fps = 60
+    try:
+        for _ in range(n_runs):  # Run n_runs episodes with the controller
+            obs, info = env.reset()
+            controller: Controller = controller_cls(obs, info, config)
 
-        while True:
-            curr_time = i / config.env.freq
+    #===========================================================================================
+            # --- Get the planned path from the controller ---
+            path_points = controller.get_trajectory()
+            
+            # --- Get all planned trajectories (for visualization of trajectory updates) ---
+            try:
+                all_trajectories = controller.get_all_trajectories()
+            except AttributeError:
+                # Fallback wenn die Methode nicht vorhanden ist
+                all_trajectories = [path_points]
 
-            action = controller.compute_control(obs, info)
-            obs, reward, terminated, truncated, info = env.step(action)
-            # Update the controller internal state and models.
-            controller_finished = controller.step_callback(
-                action, obs, reward, terminated, truncated, info
-            )
-            # Add up reward, collisions
-            if terminated or truncated or controller_finished:
-                break
-            # Synchronize the GUI.
-            if config.sim.gui:
-                if ((i * fps) % config.env.freq) < fps:
-                    env.render()
-            i += 1
+            # --- Prepare storage for the actually flown path ---
+            flown_positions: list[np.ndarray] = []
+            
+            # --- Zur Erkennung von Gate-Positionsänderungen ---
+            last_gates_positions = {}  # Dictionary mit gate_id: position zur Speicherung der letzten bekannten Positionen
+            gate_update_points = []  # Liste für die Positionen, an denen Gate-Positionsänderungen erkannt wurden
+            
+            # --- Zur Erkennung von Obstacle-Positionsänderungen ---
+            last_obstacles_positions = {}  # Dictionary mit obstacle_idx: position zur Speicherung der letzten bekannten Positionen
+            obstacle_update_points = []  # Liste für die Positionen, an denen Obstacle-Positionsänderungen erkannt wurden
+            
+            # --- Für die Visualisierung des Planungshorizonts ---
+            prediction_horizon_points = None  # Wird in jedem Schritt aktualisiert
+    #==========================================================================================
+            i = 0
+            fps = 60
 
-        controller.episode_callback(curr_time)  # Update the controller internal state and models.
-        log_episode_stats(obs, info, config, curr_time)
-        controller.episode_reset()
-        ep_times.append(curr_time if obs["target_gate"] == -1 else None)
+            while True:
+                curr_time = i / config.env.freq
 
-    env.close()
+                action = controller.compute_control(obs, info)
+                obs, reward, terminated, truncated, info = env.step(action)
+                # Update the controller internal state and models.
+                controller_finished = controller.step_callback(action, obs, reward, terminated, truncated, info)
+                # Update and visualize the simulation
+                SimVisualizer.update_visualization(env, obs, controller, config, all_trajectories, flown_positions, last_gates_positions, gate_update_points, last_obstacles_positions, obstacle_update_points)
+
+                env.render()
+
+
+                if terminated or truncated or controller_finished:
+                    break
+                # # Synchronize the GUI.
+                # if config.sim.gui:
+                #     if ((i * fps) % config.env.freq) < fps:
+                #         env.render()
+                i += 1
+
+            controller.episode_callback(curr_time)  # Update the controller internal state and models.
+            log_episode_stats(obs, info, config, curr_time)
+            controller.episode_reset()
+            ep_times.append(curr_time if obs["target_gate"] == -1 else None)
+
+
+    finally:
+        # Sicherstellen, dass die Umgebung immer ordnungsgemäß geschlossen wird
+        env.close()
+        print("Umgebung erfolgreich geschlossen.")
+        
     return ep_times
 
 
@@ -129,6 +167,4 @@ if __name__ == "__main__":
     logging.basicConfig()
     logging.getLogger("lsy_drone_racing").setLevel(logging.INFO)
     logger.setLevel(logging.INFO)
-    ep_times= fire.Fire(simulate, serialize=lambda _: None) 
-
-    input("enter sth")
+    ep_times = fire.Fire(simulate, serialize=lambda _: None)
