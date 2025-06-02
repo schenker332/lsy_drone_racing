@@ -6,7 +6,7 @@ from lsy_drone_racing.control import Controller
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
-from lsy_drone_racing.control.plotting import plot_3d
+# from lsy_drone_racing.control.plotting import plot_3d
 
 
 
@@ -139,7 +139,7 @@ class TrajectoryController(Controller):
             "obstacle_log": self._obstacle_log
         })
 
-        plot_3d(self._saved_trajectory[-1])
+        # plot_3d(self._saved_trajectory[-1])
 
 
 
