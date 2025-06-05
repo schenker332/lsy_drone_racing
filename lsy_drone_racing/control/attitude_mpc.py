@@ -6,6 +6,7 @@ from scipy.spatial.transform import Rotation as R
 from lsy_drone_racing.control import Controller
 if TYPE_CHECKING:
     from numpy.typing import NDArray
+
 from lsy_drone_racing.control.create_ocp_solver import create_ocp_solver
 from lsy_drone_racing.control.print_output import print_output
 
@@ -63,7 +64,7 @@ class MPController(Controller):
 
 
 
-        self._des_completion_time = 6
+        self._des_completion_time = 8
         ts = np.linspace(0, 1, int(self.freq * self._des_completion_time))
         self.x_des = cs_x(ts)
         self.y_des = cs_y(ts)
@@ -86,7 +87,6 @@ class MPController(Controller):
         self.last_f_cmd = 0.3
         self.config = config
         self.finished = False
-
 
 
 
@@ -134,7 +134,7 @@ class MPController(Controller):
             self.finished = True
 
 
-        print_output(obs, self._tick, self.freq)
+        # print_output(obs, self._tick, self.freq)
         q = obs["quat"]
         r = R.from_quat(q)
         # Convert to Euler angles in XYZ order
@@ -156,68 +156,29 @@ class MPController(Controller):
         self.acados_ocp_solver.set(0, "ubx", xcurrent)
 
 
-        # ====== update waypoints =====
-        for gate_id, seen in enumerate(obs["gates_visited"]):
-            if seen and gate_id not in self._added_gates:
-                idx = self._gate_to_wp_index.get(gate_id)
-                self._waypoints[idx] = obs["gates_pos"][gate_id].copy()
-                self._added_gates.add(gate_id)
-
-                ts = np.linspace(0, 1, np.shape(self._waypoints)[0])
-                cs_x = CubicSpline(ts, self._waypoints[:, 0])
-                cs_y = CubicSpline(ts, self._waypoints[:, 1])
-                cs_z = CubicSpline(ts, self._waypoints[:, 2])
-
-  
-                ts = np.linspace(0, 1, int(self.freq * self._des_completion_time))
-
-                self.x_des = cs_x(ts)
-                self.y_des = cs_y(ts)
-                self.z_des = cs_z(ts)
-                
-                # Aktualisiere auch die visuelle Trajektorie
-                vis_s = np.linspace(0.0, 1, 700)  # Hier nutzen wir denselben Bereich [0,1] wie bei ts
-                self.traj_points = np.column_stack((cs_x(vis_s), cs_y(vis_s), cs_z(vis_s)))
-                
-                # Speichere jede neue Trajektorie, damit wir alle Versionen visualisieren können
-                self._all_trajectories.append(self.traj_points.copy())
 
 
 
 
-
-        # Stelle sicher, dass wir nicht über die Grenzen der Arrays hinausgehen
-        # x_end = self.x_des[-1]
-        # y_end = self.y_des[-1]
-        # z_end = self.z_des[-1]
+        x_end = self.x_des[-1]
+        y_end = self.y_des[-1]
+        z_end = self.z_des[-1]
         
-        # for j in range(self.N):
-        #     # Verwende den letzten Wert, wenn wir über die Grenzen hinausgehen würden
-        #     idx = min(i + j, len(self.x_des) - 1)
-        #     x_ref = self.x_des[idx]
-        #     y_ref = self.y_des[idx]
-        #     z_ref = self.z_des[idx]
-            
-        #     yref = np.array([x_ref, y_ref, z_ref, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.35, 0.35, 0.0, 0.0,0.0, 0.0, 0.0, 0.0,0.0])
-        #     self.acados_ocp_solver.set(j, "yref", yref)
-
-        # # Verwende den letzten Wert für den Terminal-Zustand
-        # yref_N = np.array([x_end, y_end, z_end, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.35, 0.35, 0.0, 0.0,0.0])
-        # self.acados_ocp_solver.set(self.N, "yref", yref_N)
-
         for j in range(self.N):
+            # Verwende den letzten Wert, wenn wir über die Grenzen hinausgehen würden
             idx = min(i + j, len(self.x_des) - 1)
-            yref = np.array([self.x_des[idx], self.y_des[idx], self.z_des[idx], 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.35, 0.35, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+            x_ref = self.x_des[idx]
+            y_ref = self.y_des[idx]
+            z_ref = self.z_des[idx]
+            
+            yref = np.array([x_ref, y_ref, z_ref, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.35, 0.35, 0.0, 0.0,0.0, 0.0, 0.0, 0.0,0.0])
             self.acados_ocp_solver.set(j, "yref", yref)
 
-            p_ref = np.array([self.x_des[idx], self.y_des[idx], self.z_des[idx]])
-            self.acados_ocp_solver.set(j, "p", p_ref)
-
-        idx_N = min(i + self.N, len(self.x_des) - 1)
-        yref_N = np.array([self.x_des[idx_N], self.y_des[idx_N], self.z_des[idx_N], 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.35, 0.35, 0.0, 0.0, 0.0])
+        # Verwende den letzten Wert für den Terminal-Zustand
+        yref_N = np.array([x_end, y_end, z_end, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.35, 0.35, 0.0, 0.0,0.0])
         self.acados_ocp_solver.set(self.N, "yref", yref_N)
-        p_ref_N = np.array([self.x_des[idx_N], self.y_des[idx_N], self.z_des[idx_N]])
-        self.acados_ocp_solver.set(self.N, "p", p_ref_N)
+
+
 
 
 
@@ -234,16 +195,65 @@ class MPController(Controller):
 
 
 
+    def get_obs(self, obs: dict[str, NDArray[np.floating]], info: dict | None = None):
+
+        # ===== updated gates =====
+        if not self._last_gate:
+            for i,gate in enumerate(obs["gates_pos"]):
+                self._last_gate.append(gate.copy())  # list: [1.gate][2.gate][][]
+                self._gate_log.append([])
+                self._gate_log[i].append((self._tick, gate.copy(), obs["gates_quat"][i].copy()))   # list: [(T1)(T2)(T3)]  [][][]
+
+
+        for i, gate in enumerate(obs["gates_pos"]):
+            last_pos = self._last_gate[i]
+            if not np.allclose(gate, last_pos, atol= 1e-3):
+                self._last_gate[i] = gate.copy()
+                self._gate_log[i].append((self._tick, gate.copy(),obs["gates_quat"][i].copy()))
+
+
+        # ===== updated obstacles =====
+        if not self._last_obstacle:
+            for i, obs_pos in enumerate(obs["obstacles_pos"]):
+                self._last_obstacle.append(obs_pos.copy())
+                self._obstacle_log.append([])
+                self._obstacle_log[i].append((self._tick, obs_pos.copy()))
+
+        for i, obs_pos in enumerate(obs["obstacles_pos"]):
+            last_pos = self._last_obstacle[i]
+            if not np.allclose(obs_pos, last_pos, atol=1e-4):
+                self._last_obstacle[i] = obs_pos.copy()
+                self._obstacle_log[i].append((self._tick, obs_pos.copy()))
 
 
     def step_callback(self,action: NDArray[np.floating],obs: dict[str, NDArray[np.floating]],reward: float,terminated: bool,truncated: bool,info: dict,) -> bool:
         self._tick += 1
         self._info = obs
         self._path_log.append(obs["pos"].copy())  # Position speichern
+        self.get_obs(obs, info)
         return self.finished
 
 
+    def episode_callback(self, curr_time: float = None):
 
+        t = np.linspace(0, self._des_completion_time, len(self.x_des))
+        trajectory = CubicSpline(t, np.stack([self.x_des, self.y_des, self.z_des], axis=1))
+
+        self._saved_trajectory.append({
+            "flown_path": np.array(self._path_log),
+            "trajectory": trajectory,
+            "gates": self._info.get("gates_pos", []).copy(),
+            "gates_quat": self._info.get("gates_quat", []).copy(),
+            "obstacles": self._info.get("obstacles_pos", []).copy(),
+            "time": curr_time,
+            "t_total": self._des_completion_time,
+            "waypoints": self._waypoints.copy(),
+            "gate_log": self._gate_log,
+            "obstacle_log": self._obstacle_log
+        })
+
+
+        # plot_3d(self._saved_trajectory[-1])
 
 
 

@@ -24,7 +24,7 @@ def export_quadrotor_ode_model():
     params_acc = [20.907574256269616, 3.653687545690674]
     
     # Tube-Constraint-Radius
-    constraint.tube_radius = 0.25
+    constraint.tube_radius = 0.3
     
     # Zustände definieren
     px = SX.sym("px")
@@ -52,6 +52,11 @@ def export_quadrotor_ode_model():
     x_ref = SX.sym("x_ref")
     y_ref = SX.sym("y_ref")
     z_ref = SX.sym("z_ref")
+    x_ref_next = SX.sym("x_ref_next")
+    y_ref_next = SX.sym("y_ref_next")
+    z_ref_next = SX.sym("z_ref_next")
+    
+
     
     # Zustands- und Eingabevektoren
     states = vertcat(
@@ -59,7 +64,7 @@ def export_quadrotor_ode_model():
         f_collective, f_collective_cmd, r_cmd, p_cmd, y_cmd
     )
     controls = vertcat(df_cmd, dr_cmd, dp_cmd, dy_cmd)
-    parameters = vertcat(x_ref, y_ref, z_ref)
+    parameters = vertcat(x_ref, y_ref, z_ref, x_ref_next, y_ref_next, z_ref_next                     )
     
     # Modell mit Zuständen, Eingaben und Parametern
     model.x = states
@@ -85,9 +90,32 @@ def export_quadrotor_ode_model():
     )
     model.f_expl_expr = f_expl
     
-    # Tube-Constraint: (px - x_ref)^2 + (py - y_ref)^2 + (pz - z_ref)^2 <= tube_radius^2
-    dist_sq = (px - x_ref)**2 + (py - y_ref)**2 + (pz - z_ref)**2
-    constraint.expr = dist_sq
+    # Echter Tube-Constraint mit orthogonaler Distanz zur Trajektorielinie
+    # Vector vom aktuellen Punkt zum Referenzpunkt
+    dx = px - x_ref
+    dy = py - y_ref
+    dz = pz - z_ref
+
+    # Vektor der Trajektorie (Richtung)
+    traj_dir_x = x_ref_next - x_ref
+    traj_dir_y = y_ref_next - y_ref
+    traj_dir_z = z_ref_next - z_ref
+
+    # Normieren (mit kleiner Epsilon-Zahl zur Vermeidung von Division durch Null)
+    eps = 1e-10
+    traj_norm = SX.sqrt(traj_dir_x**2 + traj_dir_y**2 + traj_dir_z**2 + eps)
+    traj_dir_x = traj_dir_x / traj_norm
+    traj_dir_y = traj_dir_y / traj_norm
+    traj_dir_z = traj_dir_z / traj_norm
+
+    # Projektion des Abstandsvektors auf die Trajektorienrichtung
+    proj = dx*traj_dir_x + dy*traj_dir_y + dz*traj_dir_z
+
+    # Orthogonale Komponente (die tatsächliche Entfernung vom "Tube")
+    orth_dist_sq = dx**2 + dy**2 + dz**2 - proj**2
+    # constraint.expr = orth_dist_sq  # ≤ tube_radius_sq
+    
+
     constraint.shape = 1  # Dimension des Constraints (skalar)
     
     # Erstelle das AcadosModel
@@ -99,6 +127,6 @@ def export_quadrotor_ode_model():
     acados_model.name = model.name
     
     # Füge den nichtlinearen Constraint hinzu
-    acados_model.con_h_expr = constraint.expr
+    # acados_model.con_h_expr = constraint.expr
     
     return acados_model, constraint

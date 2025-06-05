@@ -47,22 +47,34 @@ def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosO
     ocp.cost.yref = np.zeros(ny)
     ocp.cost.yref_e = np.zeros(ny_e)
 
+
+
+
+
     # Initial state
     ocp.constraints.x0 = np.zeros(nx)
 
-    # Nichtlinearer Tube-Constraint
-    ocp.parameter_values = np.zeros(3)  # x_ref, y_ref, z_ref für den Constraint
+
+
+    # Nichtlinearer Tube-Constraint mit orthogonaler Distanz
+    # Parameter: [x_ref, y_ref, z_ref, x_ref_next, y_ref_next, z_ref_next]
+    ocp.parameter_values = np.zeros(6)  
     tube_radius_sq = constraint.tube_radius**2
     
     # Dimension des Constraints berücksichtigen
-    nh = getattr(constraint, 'shape', 1)
-    ocp.constraints.lh = np.array([-1.0e9] * nh)  # Sehr niedriger Wert statt -np.inf
-    ocp.constraints.uh = np.array([tube_radius_sq] * nh)  # Obere Schranke ist radius^2
+    # nh = getattr(constraint, 'shape', 1)
+    # ocp.constraints.lh = np.array([-1.0e9] * nh)  # Sehr niedriger Wert statt -np.inf
+    # ocp.constraints.uh = np.array([tube_radius_sq] * nh)  # Obere Schranke ist radius^2
+
 
     # State and input bounds (hard constraints)
     ocp.constraints.lbx = np.array([0.1, 0.1, -1.57, -1.57, -1.57])
     ocp.constraints.ubx = np.array([0.55, 0.55, 1.57, 1.57, 1.57])
     ocp.constraints.idxbx = np.array([9, 10, 11, 12, 13])
+
+
+
+
 
     # Solver settings
     ocp.solver_options.qp_solver = "FULL_CONDENSING_HPIPM"
