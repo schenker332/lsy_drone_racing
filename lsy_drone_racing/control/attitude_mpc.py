@@ -27,7 +27,7 @@ class MPController(Controller):
         self.freq = config.env.freq
         self._tick = 0
 
-        waypoints = np.array(
+        self.waypoints = np.array(
         [
             [1.0, 1.5, 0.3],
             [0.8, 1.0, 0.2],
@@ -45,33 +45,10 @@ class MPController(Controller):
             [-0.45, 0.1, 1.11],
             [-0.5,   0,  1.11],#gate4
             [-0.5, -0.2,1.11 ],
-     
-
-
-     
-
-
         ])
-        # Scale trajectory between 0 and 1
-        ts = np.linspace(0, 1, np.shape(waypoints)[0])
-        cs_x = CubicSpline(ts, waypoints[:, 0])
-        cs_y = CubicSpline(ts, waypoints[:, 1])
-        cs_z = CubicSpline(ts, waypoints[:, 2])
-
-  
 
 
-
-
-        self._des_completion_time = 6
-        ts = np.linspace(0, 1, int(self.freq * self._des_completion_time))
-        self.x_des = cs_x(ts)
-        self.y_des = cs_y(ts)
-        self.z_des = cs_z(ts)
-
-        vis_s = np.linspace(0.0, 1.0, 700)  # Bereich [0,1] für konsistente Visualisierung
-        self.traj_points = np.column_stack((cs_x(vis_s), cs_y(vis_s), cs_z(vis_s)))
-
+        
 
         self.N = 50
         self.T_HORIZON = 1.5    
@@ -86,29 +63,9 @@ class MPController(Controller):
         self.last_f_cmd = 0.3
         self.config = config
         self.finished = False
-
-
-
-
         self._info = info
-        self._waypoints = waypoints
         self._path_log = [] 
 
-
-        
-        # Speichere alle Versionen der Trajektorie, um sie in der Visualisierung anzeigen zu können
-        self._all_trajectories = [self.traj_points.copy()]
-
-
-        self._gate_to_wp_index = {
-            0: 3,
-            1: 6,
-            2: 9,
-            3: 14
-        }   
-
-        self._added_gates = set()
-        self._saved_trajectory = []
 
 
 
@@ -197,7 +154,7 @@ class MPController(Controller):
 
 
 
-    def episode_callback(self, curr_time: float):
+    def episode_callback(self, curr_time: float = None):
         """Update controller internal state at each simulation step.
         
         Args:
@@ -215,11 +172,27 @@ class MPController(Controller):
 
     def get_trajectory(self) -> NDArray[np.floating]:
         """Get the trajectory points."""
-        return self.traj_points
+                # Scale trajectory between 0 and 1
+        ts = np.linspace(0, 1, np.shape(self.waypoints)[0])
+        cs_x = CubicSpline(ts, self.waypoints[:, 0])
+        cs_y = CubicSpline(ts, self.waypoints[:, 1])
+        cs_z = CubicSpline(ts, self.waypoints[:, 2])
+
+
+        self._des_completion_time = 4
+        ts = np.linspace(0, 1, int(self.freq * self._des_completion_time))
+        self.x_des = cs_x(ts)
+        self.y_des = cs_y(ts)
+        self.z_des = cs_z(ts)
+
+        vis_s = np.linspace(0.0, 1.0, 700)  # Bereich [0,1] für konsistente Visualisierung
+        traj_points = np.column_stack((cs_x(vis_s), cs_y(vis_s), cs_z(vis_s)))
+
+
+        return traj_points
         
-    def get_all_trajectories(self) -> list[NDArray[np.floating]]:
-        """Get all trajectory versions that were created throughout the simulation."""
-        return self._all_trajectories
+
+
 
 
 

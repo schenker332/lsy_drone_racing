@@ -84,15 +84,8 @@ def simulate(
 
     #===========================================================================================
             # --- Get the planned path from the controller ---
-            path_points = controller.get_trajectory()
+            all_trajectories = [controller.get_trajectory()]
             
-            # --- Get all planned trajectories (for visualization of trajectory updates) ---
-            try:
-                all_trajectories = controller.get_all_trajectories()
-            except AttributeError:
-                # Fallback wenn die Methode nicht vorhanden ist
-                all_trajectories = [path_points]
-
             # --- Prepare storage for the actually flown path ---
             flown_positions: list[np.ndarray] = []
             
@@ -103,9 +96,6 @@ def simulate(
             # --- Zur Erkennung von Obstacle-Positionsänderungen ---
             last_obstacles_positions = {}  # Dictionary mit obstacle_idx: position zur Speicherung der letzten bekannten Positionen
             obstacle_update_points = []  # Liste für die Positionen, an denen Obstacle-Positionsänderungen erkannt wurden
-            
-            # --- Für die Visualisierung des Planungshorizonts ---
-            prediction_horizon_points = None  # Wird in jedem Schritt aktualisiert
     #==========================================================================================
             i = 0
             fps = 60
