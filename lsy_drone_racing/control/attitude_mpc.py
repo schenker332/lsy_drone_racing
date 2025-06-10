@@ -94,10 +94,7 @@ class MPController(Controller):
         self._waypoints = waypoints
         self._path_log = [] 
 
-        self._last_gate = []
-        self._gate_log = []
-        self._last_obstacle = []
-        self._obstacle_log = []
+
         
         # Speichere alle Versionen der Trajektorie, um sie in der Visualisierung anzeigen zu können
         self._all_trajectories = [self.traj_points.copy()]
@@ -156,54 +153,10 @@ class MPController(Controller):
         self.acados_ocp_solver.set(0, "ubx", xcurrent)
 
 
-        # ====== update waypoints =====
-        for gate_id, seen in enumerate(obs["gates_visited"]):
-            if seen and gate_id not in self._added_gates:
-                idx = self._gate_to_wp_index.get(gate_id)
-                self._waypoints[idx] = obs["gates_pos"][gate_id].copy()
-                self._added_gates.add(gate_id)
-
-                ts = np.linspace(0, 1, np.shape(self._waypoints)[0])
-                cs_x = CubicSpline(ts, self._waypoints[:, 0])
-                cs_y = CubicSpline(ts, self._waypoints[:, 1])
-                cs_z = CubicSpline(ts, self._waypoints[:, 2])
-
-  
-                ts = np.linspace(0, 1, int(self.freq * self._des_completion_time))
-
-                self.x_des = cs_x(ts)
-                self.y_des = cs_y(ts)
-                self.z_des = cs_z(ts)
-                
-                # Aktualisiere auch die visuelle Trajektorie
-                vis_s = np.linspace(0.0, 1, 700)  # Hier nutzen wir denselben Bereich [0,1] wie bei ts
-                self.traj_points = np.column_stack((cs_x(vis_s), cs_y(vis_s), cs_z(vis_s)))
-                
-                # Speichere jede neue Trajektorie, damit wir alle Versionen visualisieren können
-                self._all_trajectories.append(self.traj_points.copy())
 
 
 
 
-
-        # Stelle sicher, dass wir nicht über die Grenzen der Arrays hinausgehen
-        # x_end = self.x_des[-1]
-        # y_end = self.y_des[-1]
-        # z_end = self.z_des[-1]
-        
-        # for j in range(self.N):
-        #     # Verwende den letzten Wert, wenn wir über die Grenzen hinausgehen würden
-        #     idx = min(i + j, len(self.x_des) - 1)
-        #     x_ref = self.x_des[idx]
-        #     y_ref = self.y_des[idx]
-        #     z_ref = self.z_des[idx]
-            
-        #     yref = np.array([x_ref, y_ref, z_ref, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.35, 0.35, 0.0, 0.0,0.0, 0.0, 0.0, 0.0,0.0])
-        #     self.acados_ocp_solver.set(j, "yref", yref)
-
-        # # Verwende den letzten Wert für den Terminal-Zustand
-        # yref_N = np.array([x_end, y_end, z_end, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.35, 0.35, 0.0, 0.0,0.0])
-        # self.acados_ocp_solver.set(self.N, "yref", yref_N)
 
         for j in range(self.N):
             idx = min(i + j, len(self.x_des) - 1)
@@ -239,13 +192,19 @@ class MPController(Controller):
     def step_callback(self,action: NDArray[np.floating],obs: dict[str, NDArray[np.floating]],reward: float,terminated: bool,truncated: bool,info: dict,) -> bool:
         self._tick += 1
         self._info = obs
-        self._path_log.append(obs["pos"].copy())  # Position speichern
         return self.finished
 
 
 
 
-
+    def episode_callback(self, curr_time: float):
+        """Update controller internal state at each simulation step.
+        
+        Args:
+            curr_time: Current simulation time in seconds.
+        """
+        # You can use curr_time to update your controller state if needed
+        pass
 
     def episode_reset(self):
         self._plotted_once = False
