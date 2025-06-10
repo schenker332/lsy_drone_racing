@@ -47,9 +47,18 @@ class MPController(Controller):
             [-0.5, -0.2,1.11 ],
         ])
 
+        ts = np.linspace(0, 1, np.shape(self.waypoints)[0])
+        cs_x = CubicSpline(ts, self.waypoints[:, 0])
+        cs_y = CubicSpline(ts, self.waypoints[:, 1])
+        cs_z = CubicSpline(ts, self.waypoints[:, 2])
 
+
+        self._des_completion_time = 10
+        ts = np.linspace(0, 1, int(self.freq * self._des_completion_time))
+        self.x_des = cs_x(ts)
+        self.y_des = cs_y(ts)
+        self.z_des = cs_z(ts)
         
-
         self.N = 50
         self.T_HORIZON = 1.5    
         self.dt = self.T_HORIZON / self.N
