@@ -23,8 +23,7 @@ def export_quadrotor_ode_model():
     params_yaw_rate = [-0.005347588299390372, 0.0]
     params_acc = [20.907574256269616, 3.653687545690674]
     
-    # Tube-Constraint-Radius
-    constraint.tube_radius = 0.25
+
     
     # Zustände definieren
     px = SX.sym("px")
@@ -84,11 +83,7 @@ def export_quadrotor_ode_model():
         dy_cmd,
     )
     model.f_expl_expr = f_expl
-    
-    # Tube-Constraint: (px - x_ref)^2 + (py - y_ref)^2 + (pz - z_ref)^2 <= tube_radius^2
-    dist_sq = (px - x_ref)**2 + (py - y_ref)**2 + (pz - z_ref)**2
-    constraint.expr = dist_sq
-    constraint.shape = 1  # Dimension des Constraints (skalar)
+
     
     # Erstelle das AcadosModel
     acados_model = AcadosModel()
@@ -99,6 +94,5 @@ def export_quadrotor_ode_model():
     acados_model.name = model.name
     
     # Füge den nichtlinearen Constraint hinzu
-    acados_model.con_h_expr = constraint.expr
     
-    return acados_model, constraint
+    return acados_model

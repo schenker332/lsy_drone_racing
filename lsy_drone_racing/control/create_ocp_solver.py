@@ -12,7 +12,7 @@ def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosO
     ocp = AcadosOcp()
     
     # Modell und Constraint laden
-    model, constraint = export_quadrotor_ode_model()
+    model = export_quadrotor_ode_model()
     ocp.model = model
     
     # Wichtig: Acados-ocp-json-Datei mit Modellnamen benennen
@@ -52,12 +52,8 @@ def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosO
 
     # Nichtlinearer Tube-Constraint
     ocp.parameter_values = np.zeros(3)  # x_ref, y_ref, z_ref für den Constraint
-    tube_radius_sq = constraint.tube_radius**2
-    
-    # Dimension des Constraints berücksichtigen
-    nh = getattr(constraint, 'shape', 1)
-    ocp.constraints.lh = np.array([-1.0e9] * nh)  # Sehr niedriger Wert statt -np.inf
-    ocp.constraints.uh = np.array([tube_radius_sq] * nh)  # Obere Schranke ist radius^2
+
+
 
     # State and input bounds (hard constraints)
     ocp.constraints.lbx = np.array([0.1, 0.1, -1.57, -1.57, -1.57])

@@ -39,7 +39,6 @@ class SimVisualizer:
                 if gate_idx not in last_gates_positions or not np.array_equal(gate_pos, last_gates_positions[gate_idx]):
                     # Eine Gate-Position hat sich geändert oder wird zum ersten Mal beobachtet
                     gate_update_points.append(obs["pos"])
-                    print(f"Gate {gate_idx} Position aktualisiert: {gate_pos}")
                     last_gates_positions[gate_idx] = gate_pos.copy()  # Kopie der Position speichern
         
         # Prüfe, ob sich Obstacle-Positionen geändert haben
@@ -49,7 +48,6 @@ class SimVisualizer:
                 if obs_idx not in last_obstacles_positions or not np.array_equal(obs_pos, last_obstacles_positions[obs_idx]):
                     # Ein Obstacle wurde zum ersten Mal beobachtet oder hat sich geändert
                     obstacle_update_points.append(obs["pos"])
-                    print(f"Obstacle {obs_idx} Position aktualisiert: {obs_pos}")
                     last_obstacles_positions[obs_idx] = obs_pos.copy()  # Kopie der Position speichern
         
         # Aktualisiere den Planungshorizont (vorhergesagte Positionen)

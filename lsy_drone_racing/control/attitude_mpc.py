@@ -7,7 +7,7 @@ from lsy_drone_racing.control import Controller
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 from lsy_drone_racing.control.create_ocp_solver import create_ocp_solver
-from lsy_drone_racing.control.print_output import print_output
+from lsy_drone_racing.control.helper.print_output import print_output
 
 
 
@@ -27,7 +27,7 @@ class MPController(Controller):
         self.freq = config.env.freq
         self._tick = 0
 
-        self.waypoints = np.array(
+        waypoints = np.array(
         [
             [1.0, 1.5, 0.3],
             [0.8, 1.0, 0.2],
@@ -45,35 +45,38 @@ class MPController(Controller):
             [-0.45, 0.1, 1.11],
             [-0.5,   0,  1.11],#gate4
             [-0.5, -0.2,1.11 ],
+
         ])
+        # Scale trajectory between 0 and 1
+        ts = np.linspace(0, 1, np.shape(waypoints)[0])
+        cs_x = CubicSpline(ts, waypoints[:, 0])
+        cs_y = CubicSpline(ts, waypoints[:, 1])
+        cs_z = CubicSpline(ts, waypoints[:, 2])
 
-        ts = np.linspace(0, 1, np.shape(self.waypoints)[0])
-        cs_x = CubicSpline(ts, self.waypoints[:, 0])
-        cs_y = CubicSpline(ts, self.waypoints[:, 1])
-        cs_z = CubicSpline(ts, self.waypoints[:, 2])
-
-
-        self._des_completion_time = 10
+        self._des_completion_time = 7
         ts = np.linspace(0, 1, int(self.freq * self._des_completion_time))
         self.x_des = cs_x(ts)
         self.y_des = cs_y(ts)
         self.z_des = cs_z(ts)
-        
+
+   
+
         self.N = 50
         self.T_HORIZON = 1.5    
         self.dt = self.T_HORIZON / self.N
 
 
-
         self.acados_ocp_solver, self.ocp = create_ocp_solver(self.T_HORIZON, self.N)
-
         self.last_f_collective = 0.3
         self.last_rpy_cmd = np.zeros(3)
         self.last_f_cmd = 0.3
         self.config = config
         self.finished = False
         self._info = info
+        self.waypoints = waypoints
         self._path_log = [] 
+
+
 
 
 
@@ -97,30 +100,17 @@ class MPController(Controller):
             self.finished = True
 
 
-        print_output(obs, self._tick, self.freq)
+        # print_output(obs, self._tick, self.freq)
         q = obs["quat"]
         r = R.from_quat(q)
         # Convert to Euler angles in XYZ order
         rpy = r.as_euler("xyz", degrees=False)  # Set degrees=False for radians
 
 
-
-        xcurrent = np.concatenate(
-            (
-                obs["pos"],
-                obs["vel"],
-                rpy,
-                np.array([self.last_f_collective, self.last_f_cmd]),
-                self.last_rpy_cmd,
-            )
-        )
+        xcurrent = np.concatenate((obs["pos"], obs["vel"], rpy, [self.last_f_collective, self.last_f_cmd], self.last_rpy_cmd))
 
         self.acados_ocp_solver.set(0, "lbx", xcurrent)
         self.acados_ocp_solver.set(0, "ubx", xcurrent)
-
-
-
-
 
 
 
@@ -154,30 +144,21 @@ class MPController(Controller):
 
 
 
-
     def step_callback(self,action: NDArray[np.floating],obs: dict[str, NDArray[np.floating]],reward: float,terminated: bool,truncated: bool,info: dict,) -> bool:
         self._tick += 1
         self._info = obs
+        self._path_log.append(obs["pos"].copy())  # Position speichern
         return self.finished
 
 
-
-
-    def episode_callback(self, curr_time: float = None):
-        """Update controller internal state at each simulation step.
-        
-        Args:
-            curr_time: Current simulation time in seconds.
-        """
-        # You can use curr_time to update your controller state if needed
-        pass
 
     def episode_reset(self):
         self._plotted_once = False
         self._path_log = []
         self._tick = 0  # Wichtig für Zeitmessung und nächste Episode
 
-
+    def episode_callback(self, curr_time: float=None):
+        pass
 
     def get_trajectory(self) -> NDArray[np.floating]:
         """Get the trajectory points."""
@@ -186,22 +167,16 @@ class MPController(Controller):
         cs_x = CubicSpline(ts, self.waypoints[:, 0])
         cs_y = CubicSpline(ts, self.waypoints[:, 1])
         cs_z = CubicSpline(ts, self.waypoints[:, 2])
-
-
-        self._des_completion_time = 4
-        ts = np.linspace(0, 1, int(self.freq * self._des_completion_time))
-        self.x_des = cs_x(ts)
-        self.y_des = cs_y(ts)
-        self.z_des = cs_z(ts)
-
         vis_s = np.linspace(0.0, 1.0, 700)  # Bereich [0,1] für konsistente Visualisierung
         traj_points = np.column_stack((cs_x(vis_s), cs_y(vis_s), cs_z(vis_s)))
-
 
         return traj_points
         
 
-
+    def get_all_trajectories(self) -> list[NDArray[np.floating]]:
+        """Get all trajectory versions that were created throughout the simulation."""
+        return self._all_trajectories
+    
 
 
 
