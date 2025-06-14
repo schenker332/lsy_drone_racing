@@ -67,12 +67,15 @@ class MPController(Controller):
 
 
         self.acados_ocp_solver, self.ocp = create_ocp_solver(self.T_HORIZON, self.N)
+
         self.last_f_collective = 0.3
         self.last_rpy_cmd = np.zeros(3)
         self.last_f_cmd = 0.3
+
         self.config = config
         self.finished = False
         self._info = info
+        
         self.waypoints = waypoints
         self._path_log = [] 
 
