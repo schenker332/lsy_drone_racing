@@ -1,31 +1,26 @@
 from __future__ import annotations
-import types
 from acados_template import AcadosModel
-from casadi import MX, cos, sin, vertcat, Function, SX
+from casadi import  cos, sin, vertcat, SX
 
 def export_quadrotor_ode_model():
-    """Erstellt ein AcadosModel für den Quadrotor mit Tube-Constraint.
+    """Create and export a quadrotor ODE model for use with acados.
+    
+    This function defines the quadrotor dynamics model including position,
+    velocity, orientation, thrust and control inputs for the MPC controller.
     
     Returns:
-        tuple: (AcadosModel, constraint) - Das fertig konfigurierte Modell und Constraint-Objekt
+        AcadosModel: Model object containing the system dynamics and properties.
     """
-    # Erstelle Namespaces für Modell und Constraint
-    model = types.SimpleNamespace()
-    constraint = types.SimpleNamespace()
-    
-    # Setze den Modellnamen - wichtig für die JSON-Datei
-    model.name = "lsy_example_mpc"
+    model_name = "lsy_example_mpc"
 
-    # Physikalische Parameter
+    # Physical parameters
     GRAVITY = 9.806
     params_pitch_rate = [-6.003842038081178, 6.213752925707588]
     params_roll_rate = [-3.960889336015948, 4.078293254657104]
     params_yaw_rate = [-0.005347588299390372, 0.0]
     params_acc = [20.907574256269616, 3.653687545690674]
     
-
-    
-    # Zustände definieren
+    # Define states
     px = SX.sym("px")
     py = SX.sym("py")
     pz = SX.sym("pz")
@@ -41,31 +36,22 @@ def export_quadrotor_ode_model():
     p_cmd = SX.sym("p_cmd")
     y_cmd = SX.sym("y_cmd")
     
-    # Eingaben definieren
+    # Define inputs
     df_cmd = SX.sym("df_cmd")
     dr_cmd = SX.sym("dr_cmd")
     dp_cmd = SX.sym("dp_cmd")
     dy_cmd = SX.sym("dy_cmd")
 
-    # Parameter (für Tube-Constraint)
-    x_ref = SX.sym("x_ref")
-    y_ref = SX.sym("y_ref")
-    z_ref = SX.sym("z_ref")
+
     
-    # Zustands- und Eingabevektoren
+    # State and input vectors
     states = vertcat(
         px, py, pz, vx, vy, vz, roll, pitch, yaw,
         f_collective, f_collective_cmd, r_cmd, p_cmd, y_cmd
     )
     controls = vertcat(df_cmd, dr_cmd, dp_cmd, dy_cmd)
-    parameters = vertcat(x_ref, y_ref, z_ref)
-    
-    # Modell mit Zuständen, Eingaben und Parametern
-    model.x = states
-    model.u = controls
-    model.p = parameters
 
-    # Systemdynamik
+    # System dynamics
     f_expl = vertcat(
         vx,
         vy,
@@ -82,17 +68,12 @@ def export_quadrotor_ode_model():
         dp_cmd,
         dy_cmd,
     )
+    
+    # Create the AcadosModel
+    model = AcadosModel()
     model.f_expl_expr = f_expl
+    model.x = states
+    model.u = controls
+    model.name = model_name
 
-    
-    # Erstelle das AcadosModel
-    acados_model = AcadosModel()
-    acados_model.f_expl_expr = model.f_expl_expr
-    acados_model.x = model.x
-    acados_model.u = model.u
-    acados_model.p = model.p
-    acados_model.name = model.name
-    
-    # Füge den nichtlinearen Constraint hinzu
-    
-    return acados_model
+    return model
