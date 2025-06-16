@@ -42,6 +42,15 @@ def export_quadrotor_ode_model():
     dp_cmd = SX.sym("dp_cmd")
     dy_cmd = SX.sym("dy_cmd")
 
+    # Reference points (for trajectory tracking)
+    x_ref = SX.sym("x_ref")
+    y_ref = SX.sym("y_ref")
+    z_ref = SX.sym("z_ref")
+    x_ref_next = SX.sym("x_ref_next")
+    y_ref_next = SX.sym("y_ref_next")
+    z_ref_next = SX.sym("z_ref_next")
+    
+
 
     
     # State and input vectors
@@ -50,6 +59,7 @@ def export_quadrotor_ode_model():
         f_collective, f_collective_cmd, r_cmd, p_cmd, y_cmd
     )
     controls = vertcat(df_cmd, dr_cmd, dp_cmd, dy_cmd)
+    p = vertcat(x_ref, y_ref, z_ref, x_ref_next, y_ref_next, z_ref_next)
 
     # System dynamics
     f_expl = vertcat(
@@ -74,6 +84,7 @@ def export_quadrotor_ode_model():
     model.f_expl_expr = f_expl
     model.x = states
     model.u = controls
+    model.p = p
     model.name = model_name
 
     return model
