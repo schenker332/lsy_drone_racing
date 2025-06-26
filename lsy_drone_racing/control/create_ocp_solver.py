@@ -4,8 +4,7 @@ import numpy as np
 import scipy
 from acados_template import AcadosOcp, AcadosOcpSolver
 from lsy_drone_racing.control.export_quadrotor_ode_model import export_quadrotor_ode_model
-from lsy_drone_racing.control.helper.costfunction import create_tracking_cost_function
-from casadi import sumsqr
+
 
 
 def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosOcpSolver, AcadosOcp]:
@@ -74,10 +73,10 @@ def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosO
     ### ============================================================ ###
 
 
-
-    # ### ==================== new costfunction ==================== ###
-    # Erzeuge Kostenfunktion
-    cost_y_expr, cost_y_expr_e= create_tracking_cost_function(ocp.model)
+    ### moved to export_quadrotor_ode_model.py ###
+    # # ### ==================== new costfunction ==================== ###
+    # # Erzeuge Kostenfunktion
+    # cost_y_expr, cost_y_expr_e= create_tracking_cost_function(ocp.model)
     
     # Get cost dimensions from the expressions
 
@@ -91,22 +90,19 @@ def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosO
     q_l = 5  # Weight for lag error
     q_u = 0.01  # Weight for control inputs
 
-    # Set the cost expressions
-    u = ocp.model.u
+    # # Set the cost expressions
+    # u = ocp.model.u
 
-    # Definiere Steuerungskosten für CasADi-Objekte korrekt
+    # # Definiere Steuerungskosten für CasADi-Objekte korrekt
 
-    control_cost = q_u * sumsqr(u)
+    # control_cost = q_u * sumsqr(u)
 
-    # In create_ocp_solver.py
-    ocp.model.cost_expr_ext_cost = q_c * cost_y_expr[0]**2 + q_l * cost_y_expr[1]**2 + control_cost
-
-    ocp.model.cost_expr_ext_cost_e = q_c * cost_y_expr_e[0]**2 + q_l * cost_y_expr_e[1]**2  
+    # # In create_ocp_solver.py  definition of our stage cost function
+    # ocp.model.cost_expr_ext_cost = q_c * cost_y_expr[0]**2 + q_l * cost_y_expr[1]**2 + control_cost
+    # # Definition of the stage cost function for the terminal stage
+    # ocp.model.cost_expr_ext_cost_e = q_c * cost_y_expr_e[0]**2 + q_l * cost_y_expr_e[1]**2  
     # ### =========================================================== ###
     
-
-
-
 
 
 
@@ -114,9 +110,16 @@ def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosO
     ocp.constraints.x0 = np.zeros(nx)
     ocp.parameter_values = np.zeros(6)
 
-    ocp.constraints.lbx = np.array([0.1, 0.1, -1.57, -1.57, -1.57])
-    ocp.constraints.ubx = np.array([0.55, 0.55, 1.57, 1.57, 1.57])
-    ocp.constraints.idxbx = np.array([9, 10, 11, 12, 13])
+    ocp.constraints.lbx = np.array([0.1, 0.1, -1.57, -1.57, -1.57, 0.0]) # Add lower bound for v_theta
+    ocp.constraints.ubx = np.array([0.55, 0.55, 1.57, 1.57, 1.57, 5]) # Add upper bound for v_theta
+    ocp.constraints.idxbx = np.array([9, 10, 11, 12, 13 , 15]) # Add index of v_theta which is 15
+
+    ### new input contraints for d_theta_cmd ###
+       
+    ocp.constraints.lbu = np.array([-1.5]) # Lower bound for dv_theta_cmd
+    ocp.constraints.ubu = np.array([1.5])  # Upper bound for dv_theta_cmd
+    ocp.constraints.idxbu = np.array([4])  # Index of dv_theta_cmd
+
 
     # Configure solver settings
     ocp.solver_options.qp_solver = "FULL_CONDENSING_HPIPM"

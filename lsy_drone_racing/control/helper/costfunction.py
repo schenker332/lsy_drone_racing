@@ -2,6 +2,20 @@ from casadi import SX, vertcat, mtimes, transpose, sqrt
 import numpy as np
 
 def create_tracking_cost_function(model, q_c=10.0, q_l=5.0):
+    """
+    Create a custom tracking cost function for a quadrotor model.
+    Arguments:
+        model: The quadrotor model from acados_template.
+        q_c: Weight for contour error (default: 10.0).
+        q_l: Weight for lag error (default: 5.0).
+
+    Returns:
+        e_cont: Contour error (orthogonal to trajectory).
+        e_lag: Lag error (along trajectory).
+        e_cont_e: Last value of contour error for terminal cost - currently the not different to stage lag error.
+        e_lag_e: Last value of lag error for terminal cost - currently the not different to stage lag error.
+    """
+    
     x = model.x
     p = model.p
 
@@ -28,15 +42,14 @@ def create_tracking_cost_function(model, q_c=10.0, q_l=5.0):
     I = SX.eye(3)
     P = I - mtimes(t_hat, t_hat.T)
     e_c_vec = mtimes(P, e)
-    e_c = sqrt(mtimes(e_c_vec.T, e_c_vec) + eps)
+    e_cont = sqrt(mtimes(e_c_vec.T, e_c_vec) + eps)
 
     # Lag Error (entlang der Trajektorie)
-    e_l = mtimes(t_hat.T, e)
+    e_lag = mtimes(t_hat.T, e)
 
+    # For the future for a potential termial cost
+    e_cont_e = e_cont  # Last value of contour error
+    e_lag_e = e_lag  # Last value of lag error
 
-    cost_y_expr = vertcat(e_c, e_l)
-    cost_y_expr_e = vertcat(e_c,e_l)
-
-
-    return cost_y_expr, cost_y_expr_e
+    return e_cont, e_lag, e_cont_e, e_lag_e
 

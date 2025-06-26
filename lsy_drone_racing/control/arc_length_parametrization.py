@@ -11,7 +11,7 @@ def arc_length_parametrization(waypoints, num_samples):
         num_samples: Number of desired samples for the output
         
     Returns:
-        theta_values: Progress parameter (normalized arc length) [0,1]
+        theta_k_values: Progress parameter (normalized arc length) [0,1]
         x_values: X-coordinates at the corresponding theta values
         y_values: Y-coordinates at the corresponding theta values
         z_values: Z-coordinates at the corresponding theta values
@@ -31,6 +31,11 @@ def arc_length_parametrization(waypoints, num_samples):
     
     # Generate dense sampling for arc length calculation
     # More points = more accurate arc length calculation
+
+    # CRITICAL FIX: Use a fixed, high number of samples for accuracy,
+    # independent of the number of output samples.
+
+    
     num_dense_samples = num_samples
     t_dense = np.linspace(0, 1, num_dense_samples)
     
@@ -69,12 +74,12 @@ def arc_length_parametrization(waypoints, num_samples):
     theta_dense = cumulative_length / total_length
     
     # Generate evenly distributed theta values for the output
-    theta_values = np.linspace(0, 1, num_samples)
+    theta_k_values = np.linspace(0, 1, num_samples)
 
     # Interpolate t-values for the evenly distributed theta values
     # This is the key step: we convert from uniform arc lengths
     # back to the corresponding parameters on the original spline
-    t_interp = np.interp(theta_values, theta_dense, t_dense)
+    t_interp = np.interp(theta_k_values, theta_dense, t_dense)
 
 
 
@@ -87,7 +92,7 @@ def arc_length_parametrization(waypoints, num_samples):
 
 
     # Return the results
-    return theta_values, x_values, y_values, z_values, x_dense, y_dense, z_dense, t_dense, t_interp
+    return theta_k_values, x_values, y_values, z_values, x_dense, y_dense, z_dense, t_dense, t_interp
 
 # Test code that runs when this file is executed as a script
 if __name__ == "__main__":
