@@ -5,6 +5,7 @@ import scipy
 from acados_template import AcadosOcp, AcadosOcpSolver
 from lsy_drone_racing.control.export_quadrotor_ode_model import export_quadrotor_ode_model
 from lsy_drone_racing.control.helper.costfunction import create_tracking_cost_function
+from casadi import sumsqr
 
 
 def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosOcpSolver, AcadosOcp]:
@@ -37,7 +38,7 @@ def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosO
     # Set prediction horizon
     ocp.solver_options.N_horizon = N
 
-    ### ==================== old costfunction ==================== ###
+    # ### ==================== old costfunction ==================== ###
 
     # # Define cost weights
     # # State weights: high weights for position (first 3), lower for velocities, etc.
@@ -70,35 +71,37 @@ def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosO
     # # Initialize reference to zero
     # ocp.cost.yref = np.zeros(ny)
     # ocp.cost.yref_e = np.zeros(ny_e)
-    ### ============================================================ ###
+    # ### ============================================================ ###
 
 
 
     # Erzeuge Kostenfunktion
-    cost_y_expr, cost_y_expr_e, W_tracking, W_e_tracking = create_tracking_cost_function(ocp.model)
+    cost_y_expr, cost_y_expr_e= create_tracking_cost_function(ocp.model)
     
     # Get cost dimensions from the expressions
-    ny = cost_y_expr.size()[0]  # Should be 2 based on your function
-    ny_e = cost_y_expr_e.size()[0]  # Should be 2 based on your function
+
     
     # Set up nonlinear least squares cost
-    ocp.cost.cost_type = 'NONLINEAR_LS'
-    ocp.cost.cost_type_e = 'NONLINEAR_LS'
+    ocp.cost.cost_type = 'EXTERNAL'
+    ocp.cost.cost_type_e = 'EXTERNAL'
     
-    ocp.model.cost_y_expr = cost_y_expr
-    ocp.model.cost_y_expr_e = cost_y_expr_e
+    # Set weights for the cost function
+    q_c = 15 # Weight for contour error
+    q_l = 5  # Weight for lag error
+    q_u = 0.01  # Weight for control inputs
+
+    # Set the cost expressions
+    u = ocp.model.u
+
+    # Definiere Steuerungskosten für CasADi-Objekte korrekt
+
+    control_cost = q_u * sumsqr(u)
+
+# In create_ocp_solver.py
+    ocp.model.cost_expr_ext_cost = q_c * cost_y_expr[0]**2 + q_l * cost_y_expr[1]**2 + q_u + control_cost
+    ocp.model.cost_expr_ext_cost_e = q_c * cost_y_expr_e[0]**2 + q_l * cost_y_expr_e[1]**2 + q_u 
+
     
-    # Set dimensions
-    ocp.dims.ny = ny
-    ocp.dims.ny_e = ny_e
-    
-    # Set weight matrices (matching dimensions of cost expressions)
-    ocp.cost.W = W_tracking  # 2x2 matrix for contour and lag errors
-    ocp.cost.W_e = W_e_tracking  # 2x2 matrix for terminal cost
-    
-    # Set zero references for these cost terms
-    ocp.cost.yref = np.zeros(ny)
-    ocp.cost.yref_e = np.zeros(ny_e)
 
 
 

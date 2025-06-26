@@ -1,7 +1,7 @@
 from casadi import SX, vertcat, mtimes, transpose, sqrt
 import numpy as np
 
-def create_tracking_cost_function(model, q_c=15.0, q_l=5.0):
+def create_tracking_cost_function(model, q_c=10.0, q_l=5.0):
     x = model.x
     p = model.p
 
@@ -34,12 +34,9 @@ def create_tracking_cost_function(model, q_c=15.0, q_l=5.0):
     e_l = mtimes(t_hat.T, e)
 
 
-    cost_y_expr = vertcat(sqrt(q_c) * e_c**2, sqrt(q_l) * e_l**2)
-    cost_y_expr_e = vertcat(sqrt(q_c) * e_c**2, sqrt(q_l) * e_l**2)
+    cost_y_expr = vertcat(e_c, e_l)
+    cost_y_expr_e = vertcat(e_c,e_l)
 
-    # Gewichtungsmatrizen
-    W = np.eye(2)
-    W_e = np.eye(2)
 
-    return cost_y_expr, cost_y_expr_e, W, W_e
+    return cost_y_expr, cost_y_expr_e
 

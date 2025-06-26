@@ -53,6 +53,7 @@ class MPController(Controller):
             [-0.5, -0.2, 1.11],
         ])
         
+        
         # # Create spline interpolation of the trajectory
         # ts = np.linspace(0, 1, np.shape(waypoints)[0])
         # cs_x = CubicSpline(ts, waypoints[:, 0])
@@ -60,7 +61,7 @@ class MPController(Controller):
         # cs_z = CubicSpline(ts, waypoints[:, 2])
 
         # # Generate time-based reference trajectory
-        # self._des_completion_time = 7
+        # self._des_completion_time = 7 
         # ts = np.linspace(0, 1, int(self.freq * self._des_completion_time))
         # self.x_des = cs_x(ts)
         # self.y_des = cs_y(ts)
@@ -69,7 +70,7 @@ class MPController(Controller):
 
 
 
-        ### ==================== Arc Length Parametrization ==================== ###
+        # ### ==================== Arc Length Parametrization ==================== ###
 
 
         theta_values, x_vals, y_vals, z_vals, _, _, _,_,_ = arc_length_parametrization(waypoints, num_samples=1000)
@@ -81,7 +82,7 @@ class MPController(Controller):
         self.theta = 0.0        # Fortschrittsstartwert
         # self.v_theta = 0.1      # Fortschrittsgeschwindigkeit 0.66 theta/s
 
-        self.time = 15
+        self.time = 5
         self.v_theta = 1 / (self.time * self.dt * self.freq)
 
         ### ==================================================================== ###
@@ -129,9 +130,10 @@ class MPController(Controller):
         # if self._tick > i:
         #     self.finished = True
 
-        if self.theta >= 1.0:
+        if self.theta >= 1.2:
             self.finished = True
-
+            
+        # print_output(tick=self._tick, obs=obs, freq=self.config.env.freq)
         # Convert quaternion to roll-pitch-yaw angles
         rpy = R.from_quat(obs["quat"]).as_euler("xyz", degrees=False)
 
@@ -189,6 +191,9 @@ class MPController(Controller):
 
 
 
+
+
+        # ### for arc parametrization ### ===================================
         for j in range(self.N):
             theta_j = min(self.theta + j * self.v_theta * self.dt, 1.0)
             theta_j_next = min(self.theta + (j + 1) * self.v_theta * self.dt, 1.0)
@@ -220,6 +225,41 @@ class MPController(Controller):
 
         p_ref_N = np.array([xN, yN, zN, xN_next, yN_next, zN_next])
         self.acados_ocp_solver.set(self.N, "p", p_ref_N)
+        # ### ================================================================ ###
+
+
+
+
+        # Set reference trajectory for each step in the prediction horizon
+        # for j in range(self.N):
+        #     idx = min(i + j, len(self.x_des) - 1)
+        #     xj = self.x_des[idx]
+        #     yj = self.y_des[idx]
+        #     zj = self.z_des[idx]
+
+        #     idx_next = min(idx + 1, len(self.x_des) - 1)
+        #     xj_next = self.x_des[idx_next]
+        #     yj_next = self.y_des[idx_next]
+        #     zj_next = self.z_des[idx_next]
+
+        #     p_ref = np.array([xj, yj, zj, xj_next, yj_next, zj_next])
+        #     self.acados_ocp_solver.set(j, "p", p_ref)
+
+
+        # # Set terminal state reference
+        # idx_N = min(i + self.N, len(self.x_des) - 1)
+
+        # xN = self.x_des[idx_N]
+        # yN = self.y_des[idx_N]
+        # zN = self.z_des[idx_N]
+
+        # idx_N_next = min(idx_N + 1, len(self.x_des) - 1)
+        # xN_next = self.x_des[idx_N_next]
+        # yN_next = self.y_des[idx_N_next]
+        # zN_next = self.z_des[idx_N_next]
+
+        # p_ref_N = np.array([xN, yN, zN, xN_next, yN_next, zN_next])
+        # self.acados_ocp_solver.set(self.N, "p", p_ref_N)
 
 
 
@@ -228,12 +268,7 @@ class MPController(Controller):
 
 
 
-
-
-
-
-
-
+        ####============================================================================================
         # Store previous theta to track progress milestones
         if not hasattr(self, 'last_progress_milestone'):
             self.last_progress_milestone = 0.0
@@ -242,19 +277,34 @@ class MPController(Controller):
         old_theta = self.theta
         self.theta = min(self.theta + self.v_theta * self.dt, 1.0)
 
-        # Print progress every 5%
-        current_milestone = int(self.theta * 20)  # 5% = 0.05 = 1/20
-        if current_milestone > int(old_theta * 20):
-            progress_percent = current_milestone * 5
-            position = np.array([self.cs_x(self.theta), self.cs_y(self.theta), self.cs_z(self.theta)])
-            print(f"Progress: {progress_percent}% (theta = {self.theta:.3f}) - Position: {position}")
-            # You can add more information here if desired, e.g., distance to target
+        num_entries = 1000  # Anzahl der Einträge in deiner arc_length_parametrization
+        current_index = int(self.theta * num_entries)
+
+        # Ausgabe alle 0.01 Theta oder wenn sich der Index ändert
+        if abs(self.theta - old_theta) >= 0.01 or int(old_theta * num_entries) != current_index:
+            print(f"Theta: {self.theta:.3f} | Index: {current_index}/{num_entries}")
+
+
+        # # Print progress every 5%
+        # current_milestone = int(self.theta * 20)  # 5% = 0.05 = 1/20
+        # if current_milestone > int(old_theta * 20):
+        #     progress_percent = current_milestone * 5
+        #     position = np.array([self.cs_x(self.theta), self.cs_y(self.theta), self.cs_z(self.theta)])
+        #     print(f"Progress: {progress_percent}% (theta = {self.theta:.3f}) - Position: {position}")
+        #     # You can add more information here if desired, e.g., distance to target
+        ####============================================================================================
+
+
+
+
+
 
 
         # Solve the MPC problem
         self.acados_ocp_solver.solve()
+        # total_cost = self.acados_ocp_solver.get_cost()
+        # print(f"Solver Kosten: {total_cost:.4f}")
         x1 = self.acados_ocp_solver.get(1, "x")
-        
         # Apply low-pass filter to thrust for smoother control
         w = 1 / self.config.env.freq / self.dt
         self.last_f_collective = self.last_f_collective * (1 - w) + x1[9] * w

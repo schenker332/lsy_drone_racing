@@ -14,7 +14,7 @@ def export_quadrotor_ode_model():
     model_name = "lsy_example_mpc"
 
     # Physical parameters
-    GRAVITY = 9.806
+    GRAVITY = 10.906
     params_pitch_rate = [-6.003842038081178, 6.213752925707588]
     params_roll_rate = [-3.960889336015948, 4.078293254657104]
     params_yaw_rate = [-0.005347588299390372, 0.0]
