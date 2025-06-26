@@ -133,7 +133,7 @@ class MPController(Controller):
         if self.theta >= 1.2:
             self.finished = True
             
-        # print_output(tick=self._tick, obs=obs, freq=self.config.env.freq)
+        print_output(tick=self._tick, obs=obs, freq=self.config.env.freq)
         # Convert quaternion to roll-pitch-yaw angles
         rpy = R.from_quat(obs["quat"]).as_euler("xyz", degrees=False)
 
@@ -161,31 +161,31 @@ class MPController(Controller):
 
         ## ==================== new trajectory + old cost function ==================== ###
 
-        for j in range(self.N):
-            theta_j = min(self.theta + j * self.v_theta * self.dt, 1.0)
+        # for j in range(self.N):
+        #     theta_j = min(self.theta + j * self.v_theta * self.dt, 1.0)
 
-            xj = self.cs_x(theta_j)
-            yj = self.cs_y(theta_j)
-            zj = self.cs_z(theta_j)
+        #     xj = self.cs_x(theta_j)
+        #     yj = self.cs_y(theta_j)
+        #     zj = self.cs_z(theta_j)
 
-            yref = np.array([
-                xj, yj, zj, 
-                0.0, 0.0, 0.0,  # vels
-                0.0, 0.0, 0.0,  # rpy
-                0.35, 0.35,     # collective + f_cmd
-                0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0  # rest
-            ])
-            self.acados_ocp_solver.set(j, "yref", yref)
+        #     yref = np.array([
+        #         xj, yj, zj, 
+        #         0.0, 0.0, 0.0,  # vels
+        #         0.0, 0.0, 0.0,  # rpy
+        #         0.35, 0.35,     # collective + f_cmd
+        #         0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0  # rest
+        #     ])
+        #     self.acados_ocp_solver.set(j, "yref", yref)
 
 
 
-        theta_N = min(self.theta + self.N * self.v_theta * self.dt, 1.0)
-        xN = self.cs_x(theta_N)
-        yN = self.cs_y(theta_N)
-        zN = self.cs_z(theta_N)
+        # theta_N = min(self.theta + self.N * self.v_theta * self.dt, 1.0)
+        # xN = self.cs_x(theta_N)
+        # yN = self.cs_y(theta_N)
+        # zN = self.cs_z(theta_N)
 
-        yref_N = np.array([xN, yN, zN, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.35, 0.35, 0.0, 0.0, 0.0])
-        self.acados_ocp_solver.set(self.N, "yref", yref_N)
+        # yref_N = np.array([xN, yN, zN, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.35, 0.35, 0.0, 0.0, 0.0])
+        # self.acados_ocp_solver.set(self.N, "yref", yref_N)
 
         ## ================================================================== ###
 
@@ -226,37 +226,37 @@ class MPController(Controller):
 
 
         ### =================== new trajectory + new cost function ==================== ###
-        # for j in range(self.N):
-        #     theta_j = min(self.theta + j * self.v_theta * self.dt, 1.0)
-        #     theta_j_next = min(self.theta + (j + 1) * self.v_theta * self.dt, 1.0)
+        for j in range(self.N):
+            theta_j = min(self.theta + j * self.v_theta * self.dt, 1.0)
+            theta_j_next = min(self.theta + (j + 1) * self.v_theta * self.dt, 1.0)
 
-        #     xj = self.cs_x(theta_j)
-        #     yj = self.cs_y(theta_j)
-        #     zj = self.cs_z(theta_j)
+            xj = self.cs_x(theta_j)
+            yj = self.cs_y(theta_j)
+            zj = self.cs_z(theta_j)
 
-        #     xj_next = self.cs_x(theta_j_next)
-        #     yj_next = self.cs_y(theta_j_next)
-        #     zj_next = self.cs_z(theta_j_next)
+            xj_next = self.cs_x(theta_j_next)
+            yj_next = self.cs_y(theta_j_next)
+            zj_next = self.cs_z(theta_j_next)
 
-        #     p_ref = np.array([xj, yj, zj, xj_next, yj_next, zj_next])
-        #     self.acados_ocp_solver.set(j, "p", p_ref)
-
-
+            p_ref = np.array([xj, yj, zj, xj_next, yj_next, zj_next])
+            self.acados_ocp_solver.set(j, "p", p_ref)
 
 
-        # theta_N = min(self.theta + self.N * self.v_theta * self.dt, 1.0)
-        # theta_N_plus = min(self.theta + (self.N + 1) * self.v_theta * self.dt, 1.0)
 
-        # xN = self.cs_x(theta_N)
-        # yN = self.cs_y(theta_N)
-        # zN = self.cs_z(theta_N)
 
-        # xN_next = self.cs_x(theta_N_plus)
-        # yN_next = self.cs_y(theta_N_plus)
-        # zN_next = self.cs_z(theta_N_plus)
+        theta_N = min(self.theta + self.N * self.v_theta * self.dt, 1.0)
+        theta_N_plus = min(self.theta + (self.N + 1) * self.v_theta * self.dt, 1.0)
 
-        # p_ref_N = np.array([xN, yN, zN, xN_next, yN_next, zN_next])
-        # self.acados_ocp_solver.set(self.N, "p", p_ref_N)
+        xN = self.cs_x(theta_N)
+        yN = self.cs_y(theta_N)
+        zN = self.cs_z(theta_N)
+
+        xN_next = self.cs_x(theta_N_plus)
+        yN_next = self.cs_y(theta_N_plus)
+        zN_next = self.cs_z(theta_N_plus)
+
+        p_ref_N = np.array([xN, yN, zN, xN_next, yN_next, zN_next])
+        self.acados_ocp_solver.set(self.N, "p", p_ref_N)
         # # ### ================================================================ ###
 
 
