@@ -20,6 +20,8 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
     from lsy_drone_racing.envs.race_core import RaceCoreEnv
+
+
 logger = logging.getLogger(__name__)
 
 
