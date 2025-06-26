@@ -10,8 +10,6 @@ from lsy_drone_racing.control.create_ocp_solver import create_ocp_solver
 from lsy_drone_racing.control.helper.print_output import print_output
 from lsy_drone_racing.control.arc_length_parametrization import arc_length_parametrization
 
-constants = Constants.from_config("cf2x_L250")
-
 
 
 class MPController(Controller):
@@ -26,9 +24,8 @@ class MPController(Controller):
             config: Configuration of the environment.
         """
         super().__init__(obs, info, config)
-        self._N = 30
-        self._dt = 1 / config.env.freq
-        self._T_HORIZON = self._N * self._dt
+        self.freq = config.env.freq
+        self._tick = 0
 
         # MPC parameters
         self.N = 50                    # Number of discretization steps

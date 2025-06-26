@@ -100,6 +100,8 @@ def simulate(
             i = 0
             fps = 60
 
+            env.unwrapped.sim.max_visual_geom = 5_000
+
             while True:
                 curr_time = i / config.env.freq
 
