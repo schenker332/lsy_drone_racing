@@ -110,7 +110,8 @@ def simulate(
                 # Update and visualize the simulation
                 SimVisualizer.update_visualization(env, obs, controller, config, all_trajectories, flown_positions, last_gates_positions, gate_update_points, last_obstacles_positions, obstacle_update_points)
 
-                env.render()
+                if config.sim.gui:
+                    env.render()
 
 
                 if terminated or truncated or controller_finished:

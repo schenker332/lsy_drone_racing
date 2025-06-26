@@ -27,14 +27,20 @@ def export_quadrotor_ode_model():
     vx = SX.sym("vx")
     vy = SX.sym("vy")
     vz = SX.sym("vz")
+
     roll = SX.sym("r")
     pitch = SX.sym("p")
     yaw = SX.sym("y")
     f_collective = SX.sym("f_collective")
+
+    theta = SX.sym("theta")  
+    v_theta = SX.sym("v_theta")  
+
     f_collective_cmd = SX.sym("f_collective_cmd")
     r_cmd = SX.sym("r_cmd")
     p_cmd = SX.sym("p_cmd")
     y_cmd = SX.sym("y_cmd")
+    v_theta_cmd = SX.sym("v_theta_cmd") 
     
     # Define inputs
     df_cmd = SX.sym("df_cmd")

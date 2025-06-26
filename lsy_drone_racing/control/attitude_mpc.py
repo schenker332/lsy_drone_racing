@@ -54,23 +54,23 @@ class MPController(Controller):
         ])
         
         
-        # # Create spline interpolation of the trajectory
+        # ======================== old trajectory ==================== ###
         # ts = np.linspace(0, 1, np.shape(waypoints)[0])
         # cs_x = CubicSpline(ts, waypoints[:, 0])
         # cs_y = CubicSpline(ts, waypoints[:, 1])
         # cs_z = CubicSpline(ts, waypoints[:, 2])
 
         # # Generate time-based reference trajectory
-        # self._des_completion_time = 7 
+        # self._des_completion_time =  
         # ts = np.linspace(0, 1, int(self.freq * self._des_completion_time))
         # self.x_des = cs_x(ts)
         # self.y_des = cs_y(ts)
         # self.z_des = cs_z(ts)
+        # ========================= old trajectory ==================== ###
 
 
 
-
-        # ### ==================== Arc Length Parametrization ==================== ###
+        # ### ==================== new trajectory ==================== ###
 
 
         theta_values, x_vals, y_vals, z_vals, _, _, _,_,_ = arc_length_parametrization(waypoints, num_samples=1000)
@@ -82,7 +82,7 @@ class MPController(Controller):
         self.theta = 0.0        # Fortschrittsstartwert
         # self.v_theta = 0.1      # Fortschrittsgeschwindigkeit 0.66 theta/s
 
-        self.time = 5
+        self.time = 8
         self.v_theta = 1 / (self.time * self.dt * self.freq)
 
         ### ==================================================================== ###
@@ -144,7 +144,7 @@ class MPController(Controller):
 
 
 
-
+        ### ====================== old trajectory + old cost function ==================== ###
         # # Set reference trajectory for each step in the prediction horizon
         # for j in range(self.N):
         #     idx = min(i + j, len(self.x_des) - 1)
@@ -155,82 +155,43 @@ class MPController(Controller):
         # idx_N = min(i + self.N, len(self.x_des) - 1)
         # yref_N = np.array([self.x_des[idx_N], self.y_des[idx_N], self.z_des[idx_N], 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.35, 0.35, 0.0, 0.0, 0.0])
         # self.acados_ocp_solver.set(self.N, "yref", yref_N)
+        # ### ================================================================ ###
 
 
 
+        ## ==================== new trajectory + old cost function ==================== ###
 
-        ### ==================== Set Reference Trajectory ==================== ###
-
-        # for j in range(self.N):
-        #     theta_j = min(self.theta + j * self.v_theta * self.dt, 1.0)
-
-        #     xj = self.cs_x(theta_j)
-        #     yj = self.cs_y(theta_j)
-        #     zj = self.cs_z(theta_j)
-
-        #     yref = np.array([
-        #         xj, yj, zj, 
-        #         0.0, 0.0, 0.0,  # vels
-        #         0.0, 0.0, 0.0,  # rpy
-        #         0.35, 0.35,     # collective + f_cmd
-        #         0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0  # rest
-        #     ])
-        #     self.acados_ocp_solver.set(j, "yref", yref)
-
-
-
-        # theta_N = min(self.theta + self.N * self.v_theta * self.dt, 1.0)
-        # xN = self.cs_x(theta_N)
-        # yN = self.cs_y(theta_N)
-        # zN = self.cs_z(theta_N)
-
-        # yref_N = np.array([xN, yN, zN, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.35, 0.35, 0.0, 0.0, 0.0])
-        # self.acados_ocp_solver.set(self.N, "yref", yref_N)
-
-        ### ================================================================== ###
-
-
-
-
-
-        # ### for arc parametrization ### ===================================
         for j in range(self.N):
             theta_j = min(self.theta + j * self.v_theta * self.dt, 1.0)
-            theta_j_next = min(self.theta + (j + 1) * self.v_theta * self.dt, 1.0)
 
             xj = self.cs_x(theta_j)
             yj = self.cs_y(theta_j)
             zj = self.cs_z(theta_j)
 
-            xj_next = self.cs_x(theta_j_next)
-            yj_next = self.cs_y(theta_j_next)
-            zj_next = self.cs_z(theta_j_next)
-
-            p_ref = np.array([xj, yj, zj, xj_next, yj_next, zj_next])
-            self.acados_ocp_solver.set(j, "p", p_ref)
-
+            yref = np.array([
+                xj, yj, zj, 
+                0.0, 0.0, 0.0,  # vels
+                0.0, 0.0, 0.0,  # rpy
+                0.35, 0.35,     # collective + f_cmd
+                0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0  # rest
+            ])
+            self.acados_ocp_solver.set(j, "yref", yref)
 
 
 
         theta_N = min(self.theta + self.N * self.v_theta * self.dt, 1.0)
-        theta_N_plus = min(self.theta + (self.N + 1) * self.v_theta * self.dt, 1.0)
-
         xN = self.cs_x(theta_N)
         yN = self.cs_y(theta_N)
         zN = self.cs_z(theta_N)
 
-        xN_next = self.cs_x(theta_N_plus)
-        yN_next = self.cs_y(theta_N_plus)
-        zN_next = self.cs_z(theta_N_plus)
+        yref_N = np.array([xN, yN, zN, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.35, 0.35, 0.0, 0.0, 0.0])
+        self.acados_ocp_solver.set(self.N, "yref", yref_N)
 
-        p_ref_N = np.array([xN, yN, zN, xN_next, yN_next, zN_next])
-        self.acados_ocp_solver.set(self.N, "p", p_ref_N)
-        # ### ================================================================ ###
+        ## ================================================================== ###
 
 
 
-
-        # Set reference trajectory for each step in the prediction horizon
+        ### =================== old trajectory + new cost function ==================== ###
         # for j in range(self.N):
         #     idx = min(i + j, len(self.x_des) - 1)
         #     xj = self.x_des[idx]
@@ -260,8 +221,43 @@ class MPController(Controller):
 
         # p_ref_N = np.array([xN, yN, zN, xN_next, yN_next, zN_next])
         # self.acados_ocp_solver.set(self.N, "p", p_ref_N)
+        # ### ================================================================== ###
 
 
+
+        ### =================== new trajectory + new cost function ==================== ###
+        # for j in range(self.N):
+        #     theta_j = min(self.theta + j * self.v_theta * self.dt, 1.0)
+        #     theta_j_next = min(self.theta + (j + 1) * self.v_theta * self.dt, 1.0)
+
+        #     xj = self.cs_x(theta_j)
+        #     yj = self.cs_y(theta_j)
+        #     zj = self.cs_z(theta_j)
+
+        #     xj_next = self.cs_x(theta_j_next)
+        #     yj_next = self.cs_y(theta_j_next)
+        #     zj_next = self.cs_z(theta_j_next)
+
+        #     p_ref = np.array([xj, yj, zj, xj_next, yj_next, zj_next])
+        #     self.acados_ocp_solver.set(j, "p", p_ref)
+
+
+
+
+        # theta_N = min(self.theta + self.N * self.v_theta * self.dt, 1.0)
+        # theta_N_plus = min(self.theta + (self.N + 1) * self.v_theta * self.dt, 1.0)
+
+        # xN = self.cs_x(theta_N)
+        # yN = self.cs_y(theta_N)
+        # zN = self.cs_z(theta_N)
+
+        # xN_next = self.cs_x(theta_N_plus)
+        # yN_next = self.cs_y(theta_N_plus)
+        # zN_next = self.cs_z(theta_N_plus)
+
+        # p_ref_N = np.array([xN, yN, zN, xN_next, yN_next, zN_next])
+        # self.acados_ocp_solver.set(self.N, "p", p_ref_N)
+        # # ### ================================================================ ###
 
 
 
@@ -274,15 +270,17 @@ class MPController(Controller):
             self.last_progress_milestone = 0.0
 
         # Update theta value
-        old_theta = self.theta
         self.theta = min(self.theta + self.v_theta * self.dt, 1.0)
 
-        num_entries = 1000  # Anzahl der Einträge in deiner arc_length_parametrization
-        current_index = int(self.theta * num_entries)
+        # num_entries = 1000  # Anzahl der Einträge in deiner arc_length_parametrization
+        # current_index = int(self.theta * num_entries)
+        #old_theta = self.theta
+        # # Ausgabe alle 0.01 Theta oder wenn sich der Index ändert
+        # if abs(self.theta - old_theta) >= 0.01 or int(old_theta * num_entries) != current_index:
+        #     print(f"Theta: {self.theta:.3f} | Index: {current_index}/{num_entries}")
 
-        # Ausgabe alle 0.01 Theta oder wenn sich der Index ändert
-        if abs(self.theta - old_theta) >= 0.01 or int(old_theta * num_entries) != current_index:
-            print(f"Theta: {self.theta:.3f} | Index: {current_index}/{num_entries}")
+
+
 
 
         # # Print progress every 5%

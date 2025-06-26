@@ -38,69 +38,70 @@ def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosO
     # Set prediction horizon
     ocp.solver_options.N_horizon = N
 
-    # ### ==================== old costfunction ==================== ###
+    ### ==================== old costfunction ==================== ###
 
-    # # Define cost weights
-    # # State weights: high weights for position (first 3), lower for velocities, etc.
-    # Q = np.diag([10.0] * 3 + [0.01] * 3 + [0.1] * 3 + [0.01] * 5)
-    # # Control input weights
-    # R = np.diag([0.01] * nu)
+    # Define cost weights
+    # State weights: high weights for position (first 3), lower for velocities, etc.
+    Q = np.diag([10.0] * 3 + [0.01] * 3 + [0.1] * 3 + [0.01] * 5)
+    # Control input weights
+    R = np.diag([0.01] * nu)
 
-    # # Set cost function type to linear least-squares
-    # ocp.cost.cost_type = "LINEAR_LS"
-    # ocp.cost.cost_type_e = "LINEAR_LS"
+    # Set cost function type to linear least-squares
+    ocp.cost.cost_type = "LINEAR_LS"
+    ocp.cost.cost_type_e = "LINEAR_LS"
     
-    # # Combine state and input weights
-    # ocp.cost.W = scipy.linalg.block_diag(Q, R)
-    # ocp.cost.W_e = Q.copy()  # Terminal state weights
+    # Combine state and input weights
+    ocp.cost.W = scipy.linalg.block_diag(Q, R)
+    ocp.cost.W_e = Q.copy()  # Terminal state weights
 
-    # # Define output matrices for cost function
-    # # State selection matrix
-    # Vx = np.zeros((ny, nx))
-    # Vx[:nx, :] = np.eye(nx)
-    # # Control input selection matrix
-    # Vu = np.zeros((ny, nu))
-    # Vu[nx:, :] = np.eye(nu)
-    # ocp.cost.Vx = Vx
-    # ocp.cost.Vu = Vu
+    # Define output matrices for cost function
+    # State selection matrix
+    Vx = np.zeros((ny, nx))
+    Vx[:nx, :] = np.eye(nx)
+    # Control input selection matrix
+    Vu = np.zeros((ny, nu))
+    Vu[nx:, :] = np.eye(nu)
+    ocp.cost.Vx = Vx
+    ocp.cost.Vu = Vu  
 
-    # # Terminal state selection matrix
-    # Vx_e = np.eye(nx)
-    # ocp.cost.Vx_e = Vx_e
+    # Terminal state selection matrix
+    Vx_e = np.eye(nx)
+    ocp.cost.Vx_e = Vx_e
 
-    # # Initialize reference to zero
-    # ocp.cost.yref = np.zeros(ny)
-    # ocp.cost.yref_e = np.zeros(ny_e)
-    # ### ============================================================ ###
+    # Initialize reference to zero
+    ocp.cost.yref = np.zeros(ny)
+    ocp.cost.yref_e = np.zeros(ny_e)
+    ### ============================================================ ###
 
 
 
-    # Erzeuge Kostenfunktion
-    cost_y_expr, cost_y_expr_e= create_tracking_cost_function(ocp.model)
+    # ### ==================== new costfunction ==================== ###
+    # # Erzeuge Kostenfunktion
+    # cost_y_expr, cost_y_expr_e= create_tracking_cost_function(ocp.model)
     
-    # Get cost dimensions from the expressions
+    # # Get cost dimensions from the expressions
 
     
-    # Set up nonlinear least squares cost
-    ocp.cost.cost_type = 'EXTERNAL'
-    ocp.cost.cost_type_e = 'EXTERNAL'
+    # # Set up nonlinear least squares cost
+    # ocp.cost.cost_type = 'EXTERNAL'
+    # ocp.cost.cost_type_e = 'EXTERNAL'
     
-    # Set weights for the cost function
-    q_c = 15 # Weight for contour error
-    q_l = 5  # Weight for lag error
-    q_u = 0.01  # Weight for control inputs
+    # # Set weights for the cost function
+    # q_c = 15 # Weight for contour error
+    # q_l = 5  # Weight for lag error
+    # q_u = 0.01  # Weight for control inputs
 
-    # Set the cost expressions
-    u = ocp.model.u
+    # # Set the cost expressions
+    # u = ocp.model.u
 
-    # Definiere Steuerungskosten für CasADi-Objekte korrekt
+    # # Definiere Steuerungskosten für CasADi-Objekte korrekt
 
-    control_cost = q_u * sumsqr(u)
+    # control_cost = q_u * sumsqr(u)
 
-# In create_ocp_solver.py
-    ocp.model.cost_expr_ext_cost = q_c * cost_y_expr[0]**2 + q_l * cost_y_expr[1]**2 + q_u + control_cost
-    ocp.model.cost_expr_ext_cost_e = q_c * cost_y_expr_e[0]**2 + q_l * cost_y_expr_e[1]**2 + q_u 
-
+    # # In create_ocp_solver.py
+    # ocp.model.cost_expr_ext_cost = q_c * cost_y_expr[0]**2 + q_l * cost_y_expr[1]**2 + q_u + control_cost
+    # ocp.model.cost_expr_ext_cost_e = q_c * cost_y_expr_e[0]**2 + q_l * cost_y_expr_e[1]**2 + q_u 
+    # ### =========================================================== ###
     
 
 
