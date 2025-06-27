@@ -14,39 +14,42 @@ def export_quadrotor_ode_model():
     model_name = "lsy_example_mpc"
 
     # Physical parameters
-    GRAVITY = 10.906
+    GRAVITY = 9.81
     params_pitch_rate = [-6.003842038081178, 6.213752925707588]
     params_roll_rate = [-3.960889336015948, 4.078293254657104]
     params_yaw_rate = [-0.005347588299390372, 0.0]
     params_acc = [20.907574256269616, 3.653687545690674]
     
     # Define states
-    px = SX.sym("px")
-    py = SX.sym("py")
-    pz = SX.sym("pz")
-    vx = SX.sym("vx")
-    vy = SX.sym("vy")
-    vz = SX.sym("vz")
+    px = SX.sym("px") #0
+    py = SX.sym("py") #1
+    pz = SX.sym("pz") #2
+    vx = SX.sym("vx") #3
+    vy = SX.sym("vy") #4
+    vz = SX.sym("vz") #5
 
-    roll = SX.sym("r")
-    pitch = SX.sym("p")
-    yaw = SX.sym("y")
-    f_collective = SX.sym("f_collective")
+    roll = SX.sym("r") #6
+    pitch = SX.sym("p") #7
+    yaw = SX.sym("y") #8
+    f_collective = SX.sym("f_collective") #9
 
-    theta = SX.sym("theta")  
-    v_theta = SX.sym("v_theta")  
 
-    f_collective_cmd = SX.sym("f_collective_cmd")
-    r_cmd = SX.sym("r_cmd")
-    p_cmd = SX.sym("p_cmd")
-    y_cmd = SX.sym("y_cmd")
-    v_theta_cmd = SX.sym("v_theta_cmd") 
-    
+
+
+    f_collective_cmd = SX.sym("f_collective_cmd") #10
+    r_cmd = SX.sym("r_cmd") #11
+    p_cmd = SX.sym("p_cmd") #12
+    y_cmd = SX.sym("y_cmd") #13
+
+    v_theta = SX.sym("v_theta") #14
+    v_theta_cmd = SX.sym("v_theta_cmd") #15
+
     # Define inputs
     df_cmd = SX.sym("df_cmd")
     dr_cmd = SX.sym("dr_cmd")
     dp_cmd = SX.sym("dp_cmd")
     dy_cmd = SX.sym("dy_cmd")
+    dv_theta_cmd = SX.sym("dv_theta_cmd") 
 
     # Reference points (for trajectory tracking)
     x_ref = SX.sym("x_ref")
@@ -62,9 +65,10 @@ def export_quadrotor_ode_model():
     # State and input vectors
     states = vertcat(
         px, py, pz, vx, vy, vz, roll, pitch, yaw,
-        f_collective, f_collective_cmd, r_cmd, p_cmd, y_cmd
+        f_collective, f_collective_cmd, r_cmd, p_cmd, y_cmd,
+        v_theta , v_theta_cmd
     )
-    controls = vertcat(df_cmd, dr_cmd, dp_cmd, dy_cmd)
+    controls = vertcat(df_cmd, dr_cmd, dp_cmd, dy_cmd, dv_theta_cmd )
     p = vertcat(x_ref, y_ref, z_ref, x_ref_next, y_ref_next, z_ref_next)
 
     # System dynamics
@@ -75,6 +79,7 @@ def export_quadrotor_ode_model():
         (params_acc[0] * f_collective + params_acc[1]) * (cos(roll) * sin(pitch) * cos(yaw) + sin(roll) * sin(yaw)),
         (params_acc[0] * f_collective + params_acc[1]) * (cos(roll) * sin(pitch) * sin(yaw) - sin(roll) * cos(yaw)),
         (params_acc[0] * f_collective + params_acc[1]) * cos(roll) * cos(pitch) - GRAVITY,
+
         params_roll_rate[0] * roll + params_roll_rate[1] * r_cmd,
         params_pitch_rate[0] * pitch + params_pitch_rate[1] * p_cmd,
         params_yaw_rate[0] * yaw + params_yaw_rate[1] * y_cmd,
@@ -83,6 +88,10 @@ def export_quadrotor_ode_model():
         dr_cmd,
         dp_cmd,
         dy_cmd,
+
+        dv_theta_cmd,               #  dvθ/dt  = Δv_theta   (direkte Steuerung)
+        v_theta  #  dvθ/dt = 10 * (v_theta_cmd - v_theta) (direkte Steuerung)
+
     )
     
     # Create the AcadosModel

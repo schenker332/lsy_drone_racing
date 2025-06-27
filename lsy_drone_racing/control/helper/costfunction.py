@@ -1,7 +1,7 @@
 from casadi import SX, vertcat, mtimes, transpose, sqrt
 import numpy as np
 
-def create_tracking_cost_function(model, q_c=10.0, q_l=5.0):
+def create_tracking_cost_function(model):
     x = model.x
     p = model.p
 
