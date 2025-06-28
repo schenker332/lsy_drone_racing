@@ -1,6 +1,6 @@
 from __future__ import annotations
 from acados_template import AcadosModel
-from casadi import  cos, sin, vertcat, SX
+from casadi import  cos, sin, vertcat, SX, MX
 
 def export_quadrotor_ode_model():
     """Create and export a quadrotor ODE model for use with acados.
@@ -14,7 +14,7 @@ def export_quadrotor_ode_model():
     model_name = "lsy_example_mpc"
 
     # Physical parameters
-    GRAVITY = 9.81
+    GRAVITY = 11 # m/s^2, gravitational acceleration
     params_pitch_rate = [-6.003842038081178, 6.213752925707588]
     params_roll_rate = [-3.960889336015948, 4.078293254657104]
     params_yaw_rate = [-0.005347588299390372, 0.0]
@@ -41,8 +41,9 @@ def export_quadrotor_ode_model():
     p_cmd = SX.sym("p_cmd") #12
     y_cmd = SX.sym("y_cmd") #13
 
-    v_theta = SX.sym("v_theta") #14
-    v_theta_cmd = SX.sym("v_theta_cmd") #15
+    theta = SX.sym("theta") #14
+    v_theta = SX.sym("v_theta") #15
+
 
     # Define inputs
     df_cmd = SX.sym("df_cmd")
@@ -58,6 +59,10 @@ def export_quadrotor_ode_model():
     x_ref_next = SX.sym("x_ref_next")
     y_ref_next = SX.sym("y_ref_next")
     z_ref_next = SX.sym("z_ref_next")
+    weight = SX.sym("weight")  # Weight for minimum distance to trajectory
+    x_ref_min = SX.sym("x_ref_min")
+    y_ref_min = SX.sym("y_ref_min")
+    z_ref_min = SX.sym("z_ref_min")
     
 
 
@@ -66,10 +71,10 @@ def export_quadrotor_ode_model():
     states = vertcat(
         px, py, pz, vx, vy, vz, roll, pitch, yaw,
         f_collective, f_collective_cmd, r_cmd, p_cmd, y_cmd,
-        v_theta , v_theta_cmd
+        theta, v_theta
     )
     controls = vertcat(df_cmd, dr_cmd, dp_cmd, dy_cmd, dv_theta_cmd )
-    p = vertcat(x_ref, y_ref, z_ref, x_ref_next, y_ref_next, z_ref_next)
+    p = vertcat(x_ref, y_ref, z_ref, x_ref_next, y_ref_next, z_ref_next, weight, x_ref_min, y_ref_min, z_ref_min)
 
     # System dynamics
     f_expl = vertcat(
@@ -88,11 +93,23 @@ def export_quadrotor_ode_model():
         dr_cmd,
         dp_cmd,
         dy_cmd,
-
-        dv_theta_cmd,               #  dvθ/dt  = Δv_theta   (direkte Steuerung)
-        v_theta  #  dvθ/dt = 10 * (v_theta_cmd - v_theta) (direkte Steuerung)
-
+        v_theta,  # theta_dot = v_theta
+        dv_theta_cmd,  # v_theta_dot = dv_theta_cmd
+     
+ 
     )
+
+
+
+
+
+
+
+
+
+
+
+
     
     # Create the AcadosModel
     model = AcadosModel()

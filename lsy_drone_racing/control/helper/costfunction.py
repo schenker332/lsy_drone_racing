@@ -1,6 +1,7 @@
-from casadi import SX, vertcat, mtimes, transpose, sqrt
+from casadi import SX, vertcat, mtimes, transpose, sqrt, sum1
 import numpy as np
-
+import scipy
+from scipy.interpolate import CubicSpline
 def create_tracking_cost_function(model):
     x = model.x
     p = model.p
@@ -40,3 +41,13 @@ def create_tracking_cost_function(model):
 
     return cost_y_expr, cost_y_expr_e
 
+
+def get_min_distance_to_trajectory(model):
+    p = model.p
+    x = model.x
+    x_ref_min, y_ref_min, z_ref_min = p[7], p[8], p[9]
+
+    # Minimum distance to trajectory
+    min_distance = sqrt((x[0] - x_ref_min)**2 + (x[1] - y_ref_min)**2 + (x[2] - z_ref_min)**2)
+
+    return min_distance
