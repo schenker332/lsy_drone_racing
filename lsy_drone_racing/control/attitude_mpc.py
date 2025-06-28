@@ -8,7 +8,6 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 from lsy_drone_racing.control.create_ocp_solver import create_ocp_solver
 from lsy_drone_racing.control.helper.print_output import print_output
-from lsy_drone_racing.control.arc_length_parametrization import arc_length_parametrization
 
 
 
@@ -32,7 +31,6 @@ class MPController(Controller):
         self.T_HORIZON = 1.5           # Time horizon in seconds
         self.dt = self.T_HORIZON / self.N  # Step size
 
-        # Track waypoints with gates labeled
         waypoints = np.array(
         [
             [1.0, 1.5, 0.2],
@@ -47,13 +45,11 @@ class MPController(Controller):
             [0, 1, 0.56],        # gate3
             [-0.2, 1.4, 0.56],
             [-0.9, 1.3, 0.8],
-            # [-1.2, 0.1, 1.11],
             # [-0.5, 0, 1.11],     # gate4
             [-0.3, -0.2, 1.11],
         ])
         
         
-        # ======================== old trajectory ==================== ###
         ts = np.linspace(0, 1, np.shape(waypoints)[0])
         self.cs_x = CubicSpline(ts, waypoints[:, 0])
         self.cs_y = CubicSpline(ts, waypoints[:, 1])
@@ -65,33 +61,6 @@ class MPController(Controller):
         gate_indices = [3, 6, 9, 11]
         self.gate_thetas = [ts[i] for i in gate_indices]
         self.gate_peak_weights = [40, 80, 60, 60]
-
-        # ========================= old trajectory ==================== ###
-
-
-
-        # ### ==================== new trajectory ==================== ###
-
-
-        # theta_values, x_vals, y_vals, z_vals, _, _, _,_,_ = arc_length_parametrization(waypoints, num_samples=1000)
-
-        # self.cs_x = CubicSpline(theta_values, x_vals)
-        # self.cs_y = CubicSpline(theta_values, y_vals)
-        # self.cs_z = CubicSpline(theta_values, z_vals)
-
-        # self.theta = 0.0        # Fortschrittsstartwert
-
-
-        # self.time = 8
-        # self.last_v_theta = 1 / (self.time * self.dt * self.freq)
-        # self.last_v_theta_cmd = 0
-
-        ### ==================================================================== ###
-
-
-
-
-
 
         # Create the optimal control problem solver
         self.acados_ocp_solver, self.ocp = create_ocp_solver(self.T_HORIZON, self.N)
@@ -107,9 +76,6 @@ class MPController(Controller):
         self._info = info
         self.waypoints = waypoints
         self._path_log = []
-
-
-
 
 
 
@@ -130,105 +96,60 @@ class MPController(Controller):
         if self.theta >= 1.2:
             self.finished = True
             
-        # print_output(tick=self._tick, obs=obs, freq=self.config.env.freq)
 
-        rpy = R.from_quat(obs["quat"]).as_euler("xyz", degrees=False)
+
 
         # Construct the current state vector for the MPC solver
-        xcurrent = np.concatenate((obs["pos"], obs["vel"], rpy, [self.last_f_collective, self.last_f_cmd], self.last_rpy_cmd, [ self.theta, self.v_theta]) )
+        xcurrent = np.concatenate((obs["pos"], obs["vel"],  R.from_quat(obs["quat"]).as_euler("xyz", degrees=False), [self.last_f_collective, self.last_f_cmd], self.last_rpy_cmd, [ self.theta, self.v_theta]) )
         self.acados_ocp_solver.set(0, "lbx", xcurrent)
         self.acados_ocp_solver.set(0, "ubx", xcurrent)
 
-        #printe akutelle weight
-        # print(f"weight: {self.get_weight(self.theta):.2f}")
-
-        #gib die min_traj_pos aus
-        min_traj_pos,_, min_theta = self.compute_min_distance_to_trajectory(obs["pos"])
-        # print(f"Min distance to trajectory: {min_traj_pos[0]:.4f} at position {min_traj_pos[2]}")
 
 
+        _,_,min_theta = self.compute_min_distance_to_trajectory(obs["pos"])
 
 
-        for j in range(self.N):
+        # Prepare reference trajectory and weights for all steps in the horizon
+        for j in range(self.N + 1):
             theta_j = min(self.theta + j * self.v_theta * self.dt, 1.0)
             theta_j_next = min(theta_j + 0.0001, 1.0)
             theta_min_j = min(min_theta + j * self.v_theta * self.dt, 1.0)
 
-            xj = self.cs_x(theta_j)
-            yj = self.cs_y(theta_j)
-            zj = self.cs_z(theta_j)
+            p_ref = np.array([
+            self.cs_x(theta_j), self.cs_y(theta_j), self.cs_z(theta_j), # for contouring
+            self.cs_x(theta_j_next), self.cs_y(theta_j_next), self.cs_z(theta_j_next), #for contouring
 
-            xj_next = self.cs_x(theta_j_next)
-            yj_next = self.cs_y(theta_j_next)
-            zj_next = self.cs_z(theta_j_next)
-
-
-            xj_min = self.cs_x(theta_min_j)
-            yj_min = self.cs_y(theta_min_j)
-            zj_min = self.cs_z(theta_min_j)
-
-            weight = self.get_weight(theta_j)
-
-
-
-            p_ref = np.array([xj, yj, zj, xj_next, yj_next, zj_next, weight, xj_min, yj_min, zj_min])
+            self.get_weight(theta_j),   # for gauss weighting
+            self.cs_x(theta_min_j), self.cs_y(theta_min_j), self.cs_z(theta_min_j) # for real minimun distance
+            ])
             self.acados_ocp_solver.set(j, "p", p_ref)
-
-
-        theta_N = min(self.theta + self.N * self.v_theta * self.dt, 1.0)
-        theta_N_plus = min(theta_N + 0.0001, 1.0)
-        theta_min_N = min(min_theta + self.N * self.v_theta * self.dt, 1.0)
-
-        xN = self.cs_x(theta_N)
-        yN = self.cs_y(theta_N)
-        zN = self.cs_z(theta_N)
-
-        xN_next = self.cs_x(theta_N_plus)
-        yN_next = self.cs_y(theta_N_plus)
-        zN_next = self.cs_z(theta_N_plus)
-
-        xN_min = self.cs_x(theta_min_N)
-        yN_min = self.cs_y(theta_min_N)
-        zN_min = self.cs_z(theta_min_N)
-
-        p_ref_N = np.array([xN, yN, zN, xN_next, yN_next, zN_next, self.get_weight(theta_N), xN_min, yN_min, zN_min])
-        self.acados_ocp_solver.set(self.N, "p", p_ref_N)
-
-
 
 
         # Solve the MPC problem
         self.acados_ocp_solver.solve()
-
         x1 = self.acados_ocp_solver.get(1, "x")
 
-        # # # print x with their names
+        # print_output(tick=self._tick, obs=obs, freq=self.config.env.freq)
         # state_names = ["px", "py", "pz", "vx", "vy", "vz", "roll", "pitch", "yaw",
         #                "f_collective", "f_collective_cmd", "r_cmd", "p_cmd", "y_cmd",
         #                "theta", "v_theta"]
         # for name, value in zip(state_names, x1):
         #     print(f"{name}: {value}")
-        # #print =====
-        # print("=" * 20)
-        # #printe die zeit
+
+        # print(f"weight: {self.get_weight(self.theta):.2f}")
         # print(f"Time: {self._tick/self.freq:.2f}s")
+        # print("=" * 20)
 
 
-
-
-        # total_cost = self.acados_ocp_solver.get_cost()
-        # print(f"Solver Kosten: {total_cost:.4f}")
-    
-        # Apply low-pass filter to thrust for smoother control
         w = 1 / self.config.env.freq / self.dt
         self.last_f_collective = self.last_f_collective * (1 - w) + x1[9] * w
         self.last_f_cmd = x1[10]
         self.last_rpy_cmd = x1[11:14]  
 
+ 
         self.theta += self.v_theta * self.dt  # Update theta based on v_theta and dt
         self.v_theta = x1[15]
-
-
+  
 
         cmd = x1[10:14]
         
@@ -271,6 +192,9 @@ class MPController(Controller):
             curr_time: Current simulation time.
         """
         pass
+
+
+
 
     def get_trajectory(self) -> NDArray[np.floating]:
         """Get the smoothed reference trajectory points.

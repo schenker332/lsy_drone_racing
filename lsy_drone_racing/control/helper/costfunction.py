@@ -1,8 +1,7 @@
-from casadi import SX, vertcat, mtimes, transpose, sqrt, sum1
+from casadi import SX, vertcat, mtimes, sqrt
 import numpy as np
-import scipy
-from scipy.interpolate import CubicSpline
-def create_tracking_cost_function(model):
+
+def contour_and_lag_error(model):
     x = model.x
     p = model.p
 
@@ -35,11 +34,7 @@ def create_tracking_cost_function(model):
     e_l = mtimes(t_hat.T, e)
 
 
-    cost_y_expr = vertcat(e_c, e_l)
-    cost_y_expr_e = vertcat(e_c,e_l)
-
-
-    return cost_y_expr, cost_y_expr_e
+    return e_c, e_l
 
 
 def get_min_distance_to_trajectory(model):

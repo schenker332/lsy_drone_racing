@@ -49,7 +49,6 @@ class SimVisualizer:
         next_z = controller.cs_z(theta_next)
         next_point = np.array([next_x, next_y, next_z])
 
-
         
         # Zeichne einen auffälligen Ball an der Referenzposition
         draw_point(env, ref_point, 
@@ -80,15 +79,15 @@ class SimVisualizer:
         e_l_vis = ref_point + e_l_vec
         e_c_vis = ref_point + e_c_vec
         
-        # Zeichne den Tangentenvektor (blau)
-        draw_line(env, np.vstack([ref_point, t_hat_scaled]),
-                rgba=np.array([0.0, 0.0, 1.0, 1.0]),  # Blau
-                min_size=2.0, max_size=2.0)
+        # # Zeichne den Tangentenvektor (blau)
+        # draw_line(env, np.vstack([ref_point, t_hat_scaled]),
+        #         rgba=np.array([0.0, 0.0, 1.0, 1.0]),  # Blau
+        #         min_size=2.0, max_size=2.0)
         
-        # Zeichne den Fehlervektor e (rot)
-        draw_line(env, np.vstack([ref_point, drone_pos]),
-                rgba=np.array([1.0, 0.0, 0.0, 1.0]),  # Rot
-                min_size=2.0, max_size=2.0)
+        # # Zeichne den Fehlervektor e (rot)
+        # draw_line(env, np.vstack([ref_point, drone_pos]),
+        #         rgba=np.array([1.0, 0.0, 0.0, 1.0]),  # Rot
+        #         min_size=2.0, max_size=2.0)
         
         # Zeichne den Contour Error Vektor e_c (grün)
         draw_line(env, np.vstack([ref_point, e_c_vis]),
@@ -107,7 +106,7 @@ class SimVisualizer:
         
         # Zeichne den Punkt auf der Trajektorie, der den minimalen Abstand hat
         draw_point(env, min_traj_pos, 
-                size=0.02,  # Größe des Punktes
+                size=0.01,  # Größe des Punktes
                 rgba=np.array([1.0, 0.5, 0.0, 0.8]))  # Orange
         
         # Zeichne eine Linie vom Drohnenpunkt zum nächsten Punkt (orange)
