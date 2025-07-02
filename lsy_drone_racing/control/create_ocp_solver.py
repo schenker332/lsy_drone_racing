@@ -46,9 +46,10 @@ def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosO
 
     q_c = 60 # contour error
     q_l = 40 # lag error
-    # mu = 0.00065 # progress
-    #mu = 0.0008
-    mu = 0.0006
+    #mu = 0.0018 # progress
+    mu = 0.002 # progress
+
+
     q_min = p[6]  # gaussian weight
 
 
@@ -62,14 +63,15 @@ def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosO
 
 
     # Inputs
-    q_u_vec = DM([0.02, 0.05, 0.05, 0.05, 0.05])  # Gewichtung für df_cmd, dr_cmd, dp_cmd, dy_cmd, dv_theta_cmd
+    q_u_vec = DM([0.06, 0.055, 0.055, 0.055, 0.05 ])  # Gewichtung für df_cmd, dr_cmd, dp_cmd, dy_cmd, dv_theta_cmd
     weighted_squares = q_u_vec * (u**2)
-    control_cost = sum1(weighted_squares)
+    #control_cost = sum1(weighted_squares)
 
+    control_cost = u[0]**2 * q_u_vec[0] + u[1]**2 * q_u_vec[1] + u[2]**2 * q_u_vec[2] + u[3]**2 * q_u_vec[3] + u[4]**2 * q_u_vec[4]
 
     # Set cost funnction
-    ocp.model.cost_expr_ext_cost    = q_c * e_c**2 + q_l * e_l**2   - mu * x[15]   + q_min * min_distance**2   + control_cost     #+ hover_error**2 + hover_error_cmd**2 
-    ocp.model.cost_expr_ext_cost_e  = q_c * e_c**2 + q_l * e_l**2   - mu * x[15]   + q_min * min_distance**2
+    ocp.model.cost_expr_ext_cost    = q_c * e_c**2 + q_l * e_l**2   - mu * x[15]**2   + q_min * min_distance**2   + control_cost     #+ hover_error**2 + hover_error_cmd**2 
+    ocp.model.cost_expr_ext_cost_e  = q_c * e_c**2 + q_l * e_l**2   - mu * x[15]**2   + q_min * min_distance**2
 
 
     
@@ -78,9 +80,12 @@ def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosO
     ocp.constraints.x0 = np.zeros(nx)
     ocp.parameter_values = np.zeros(np_)
 
-    ocp.constraints.lbx = np.array([0.1, 0.1, -1.57, -1.57, -1.57])
-    ocp.constraints.ubx = np.array([0.55, 0.55, 1.57, 1.57, 1.57])
-    ocp.constraints.idxbx = np.array([9, 10, 11, 12, 13])
+    ocp.constraints.lbx = np.array([0.1, 0.1, -1.57, -1.57, -1.57,0,0 ])
+    ocp.constraints.ubx = np.array([0.55, 0.55, 1.57, 1.57, 1.57,1,0.25])
+    ocp.constraints.idxbx = np.array([9, 10, 11, 12, 13,14,15])
+
+
+
 
  
     # Solver Options

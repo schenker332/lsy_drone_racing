@@ -80,6 +80,10 @@ def simulate(
     try:
         for _ in range(n_runs):  # Run n_runs episodes with the controller
             obs, info = env.reset()
+            default_mass = env.unwrapped.drone_mass  # Standard-Masse
+            current_mass = env.unwrapped.sim.data.params.mass  # Randomisierte Masse
+            mass_deviation = current_mass - default_mass  # Abweichung
+            print(f"Drone mass - Default: {default_mass}, Deviation: {mass_deviation}, Total: {current_mass}")
             controller: Controller = controller_cls(obs, info, config)
 
     #===========================================================================================
