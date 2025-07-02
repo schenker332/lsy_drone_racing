@@ -46,7 +46,9 @@ class MPController(Controller):
             [-0.2, 1.4, 0.56],
             [-0.9, 1.3, 0.8], 
             [-0.5, 0, 1.11],     # gate4
-            [-0.6, -2, 1.11] # point after gate for clean trajectory to finish 
+	    [-0.1, -1, 1.6]
+	    # old final point of max below, potential issue for shortcut
+            #[-0.6, -2, 1.11] # point after gate for clean trajectory to finish 
             ### LEARNING: Last poun needs to be really far out for a smooth trajectory though the gate (at least with our current trajectory calculation)
 
         ])
@@ -63,13 +65,15 @@ class MPController(Controller):
 
         self.theta = 0
         self.v_theta = 1/ (5 * self.dt * self.freq) 
-
-        gate_indices = [3, 6, 9, 11, 12]
+        #self.v_theta = 0.0  # Initial velocity of theta, adjust as needed
+        gate_indices = [3, 6, 9, 12]
         self.gate_thetas = [ts[i] for i in gate_indices]
         ### LEARNING: Weights that are higher than 60 can cause huge issues, 
         # if the drone is not able to get the curve (i.e. reversing back, crashing into the gate, 
         # or deliberately missting the gate to avoid a high off-center penalty)
-        self.gate_peak_weights = [35, 50, 60, 5, 50] 
+        self.gate_peak_weights = [35, 50, 60, 5, 50]
+	# # Niclas' gate peak weights
+        #self.gate_peak_weights = [40, 80, 60, 140] 
 
 
         # Create the optimal control problem solver
@@ -140,26 +144,25 @@ class MPController(Controller):
         self.acados_ocp_solver.solve()
         x1 = self.acados_ocp_solver.get(1, "x")
         u1 = self.acados_ocp_solver.get(1, "u")
-
         ### Debugging block for flying commands
 
         # Debugging of  feedback law i.e print u1
+        # # print u1
         # input_names = ["df_cmd", "dr_cmd", "dp_cmd", "dy_cmd", "dv_theta_cmd"]
         # for name, value in zip(input_names, u1):
-        #     print(f"{name}: {value:.8f}")
-
-        # print("=" * 20)
+        #     print(f"{name}: {value:.19f}")
 
        
-        # print_output(tick=self._tick, obs=obs, freq=self.config.env.freq)
-        
-        ## Debugging prinzs for state variables
-        state_names = ["px", "py", "pz", "vx", "vy", "vz", "roll", "pitch", "yaw",
-                       "f_collective", "f_collective_cmd", "r_cmd", "p_cmd", "y_cmd",
-                       "theta", "v_theta"]
-        
+	## Debugging prinzs for state variables
+        # # print_output(tick=self._tick, obs=obs, freq=self.config.env.freq)
+        # state_names = ["px", "py", "pz", "vx", "vy", "vz", "roll", "pitch", "yaw",
+        #                "f_collective", "f_collective_cmd", "r_cmd", "p_cmd", "y_cmd",
+        #                "theta", "v_theta"]
+
         # for name, value in zip(state_names, x1):
         #     print(f"{name}: {value}")
+        
+        # print("=" * 20)
         
         # # print(f"weight: {self.get_weight(min_theta):.2f}")
         # print(f"min_dist: {min_dist:.2f} at theta: {min_theta:.2f}")
@@ -174,7 +177,8 @@ class MPController(Controller):
 
         self.v_theta = x1[15] 
         self.theta = min(1.0, self.theta + self.v_theta * self.dt)
-  
+        #self.theta = x1[14]  # Experimental Update theta directly from the MPC solution
+
   
   
 
