@@ -45,13 +45,9 @@ class MPController(Controller):
             [0, 1, 0.56],        # gate3
             [-0.2, 1.4, 0.56],
             [-0.9, 1.3, 0.8], 
-           
             [-0.5, 0, 1.11],     # gate4
-            # [-0.2, -1, 1.5]
-
-
-
-
+            [-0.6, -2, 1.11] # point after gate for clean trajectory to finish 
+            ### LEARNING: Last poun needs to be really far out for a smooth trajectory though the gate (at least with our current trajectory calculation)
 
         ])
 
@@ -68,9 +64,12 @@ class MPController(Controller):
         self.theta = 0
         self.v_theta = 1/ (5 * self.dt * self.freq) 
 
-        gate_indices = [3, 6, 9,11, 12]
+        gate_indices = [3, 6, 9, 11, 12]
         self.gate_thetas = [ts[i] for i in gate_indices]
-        self.gate_peak_weights = [40, 80, 60,110, 10] 
+        ### LEARNING: Weights that are higher than 60 can cause huge issues, 
+        # if the drone is not able to get the curve (i.e. reversing back, crashing into the gate, 
+        # or deliberately missting the gate to avoid a high off-center penalty)
+        self.gate_peak_weights = [35, 50, 60, 5, 50] 
 
 
         # Create the optimal control problem solver
@@ -142,19 +141,25 @@ class MPController(Controller):
         x1 = self.acados_ocp_solver.get(1, "x")
         u1 = self.acados_ocp_solver.get(1, "u")
 
-        # print u1
-        input_names = ["df_cmd", "dr_cmd", "dp_cmd", "dy_cmd", "dv_theta_cmd"]
-        for name, value in zip(input_names, u1):
-            print(f"{name}: {value:.8f}")
+        ### Debugging block for flying commands
 
-        print("=" * 20)
+        # Debugging of  feedback law i.e print u1
+        # input_names = ["df_cmd", "dr_cmd", "dp_cmd", "dy_cmd", "dv_theta_cmd"]
+        # for name, value in zip(input_names, u1):
+        #     print(f"{name}: {value:.8f}")
 
+        # print("=" * 20)
+
+       
         # print_output(tick=self._tick, obs=obs, freq=self.config.env.freq)
+        
+        ## Debugging prinzs for state variables
         state_names = ["px", "py", "pz", "vx", "vy", "vz", "roll", "pitch", "yaw",
                        "f_collective", "f_collective_cmd", "r_cmd", "p_cmd", "y_cmd",
                        "theta", "v_theta"]
-        for name, value in zip(state_names, x1):
-            print(f"{name}: {value}")
+        
+        # for name, value in zip(state_names, x1):
+        #     print(f"{name}: {value}")
         
         # # print(f"weight: {self.get_weight(min_theta):.2f}")
         # print(f"min_dist: {min_dist:.2f} at theta: {min_theta:.2f}")

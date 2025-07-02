@@ -62,12 +62,21 @@ def export_quadrotor_ode_model():
     
     # State and input vectors
     states = vertcat(
-        px, py, pz, vx, vy, vz, roll, pitch, yaw,
-        f_collective, f_collective_cmd, r_cmd, p_cmd, y_cmd,
-        theta, v_theta
+        px, py, pz, # 0 , 1, 2
+        vx, vy, vz, # 3, 4, 5
+        roll, pitch, yaw, # 6, 7, 8
+        f_collective, f_collective_cmd, r_cmd, # 9, 10, 11
+        p_cmd, y_cmd, # 12, 13
+        theta, v_theta # 14, 15
+
     )
-    controls = vertcat(df_cmd, dr_cmd, dp_cmd, dy_cmd, dv_theta_cmd)
-    p = vertcat(x_ref, y_ref, z_ref, x_ref_next, y_ref_next, z_ref_next, weight, x_ref_min, y_ref_min, z_ref_min)
+    controls = vertcat(df_cmd, dr_cmd, dp_cmd, # 0, 1, 2
+                       dy_cmd, dv_theta_cmd) # 3, 4
+    
+    p = vertcat(x_ref, y_ref, z_ref, # 0, 1, 2
+                 x_ref_next, y_ref_next, z_ref_next, # 3, 4, 5
+                   weight, x_ref_min, y_ref_min, # 6, 7, 8
+                   z_ref_min) # 9
 
     # System dynamics
     f_expl = vertcat(
