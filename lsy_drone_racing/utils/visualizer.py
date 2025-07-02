@@ -31,7 +31,7 @@ class SimVisualizer:
             last_obstacles_positions: Dictionary of last known obstacle positions
             obstacle_update_points: List of positions where obstacles were updated
         """
-        from lsy_drone_racing.utils import draw_line, draw_gates, draw_point, draw_obstacles, generate_parallel_lines
+        from lsy_drone_racing.utils import  draw_gates, draw_point, draw_obstacles, generate_parallel_lines,draw_line
         
         # Record current drone position (ground truth state)
         flown_positions.append(obs["pos"])
@@ -43,7 +43,7 @@ class SimVisualizer:
         ref_z = controller.cs_z(theta)
         ref_point = np.array([ref_x, ref_y, ref_z])
 
-        theta_next = min(theta + 0.0001, 1.0)
+        theta_next = theta + 0.0001
         next_x = controller.cs_x(theta_next)
         next_y = controller.cs_y(theta_next)
         next_z = controller.cs_z(theta_next)
@@ -79,15 +79,15 @@ class SimVisualizer:
         e_l_vis = ref_point + e_l_vec
         e_c_vis = ref_point + e_c_vec
         
-        # # Zeichne den Tangentenvektor (blau)
-        # draw_line(env, np.vstack([ref_point, t_hat_scaled]),
-        #         rgba=np.array([0.0, 0.0, 1.0, 1.0]),  # Blau
-        #         min_size=2.0, max_size=2.0)
+        # Zeichne den Tangentenvektor (blau)
+        draw_line(env, np.vstack([ref_point, t_hat_scaled]),
+                rgba=np.array([0.0, 0.0, 1.0, 1.0]),  # Blau
+                min_size=2.0, max_size=2.0)
         
-        # # Zeichne den Fehlervektor e (rot)
-        # draw_line(env, np.vstack([ref_point, drone_pos]),
-        #         rgba=np.array([1.0, 0.0, 0.0, 1.0]),  # Rot
-        #         min_size=2.0, max_size=2.0)
+        # Zeichne den Fehlervektor e (rot)
+        draw_line(env, np.vstack([ref_point, drone_pos]),
+                rgba=np.array([1.0, 0.0, 0.0, 1.0]),  # Rot
+                min_size=2.0, max_size=2.0)
         
         # Zeichne den Contour Error Vektor e_c (grün)
         draw_line(env, np.vstack([ref_point, e_c_vis]),
@@ -166,7 +166,7 @@ class SimVisualizer:
             
         # Draw both the planned path and the flown path every frame
 
-        # Draw all previous trajectories with faded colors
+        #Draw all previous trajectories with faded colors
         for i, traj in enumerate(all_trajectories[:-1]):
             # Light green with decreasing transparency for older trajectories
             alpha = 0.3 + 0.5 * (i / max(1, len(all_trajectories) - 1))

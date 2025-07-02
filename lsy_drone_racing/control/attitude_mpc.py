@@ -44,10 +44,19 @@ class MPController(Controller):
             [0.5, 0, 0.8],
             [0, 1, 0.56],        # gate3
             [-0.2, 1.4, 0.56],
-            [-0.9, 1.3, 0.8],
-            # [-0.5, 0, 1.11],     # gate4
-            [-0.3, -0.2, 1.11],
+            [-0.9, 1.3, 0.8], 
+           
+            [-0.5, 0, 1.11],     # gate4
+            # [-0.2, -1, 1.5]
+
+
+
+
+
         ])
+
+
+
         
         
         ts = np.linspace(0, 1, np.shape(waypoints)[0])
@@ -55,12 +64,14 @@ class MPController(Controller):
         self.cs_y = CubicSpline(ts, waypoints[:, 1])
         self.cs_z = CubicSpline(ts, waypoints[:, 2])
 
-        self.theta = 0
-        self.v_theta = 1/ (9 * self.dt * self.freq) 
 
-        gate_indices = [3, 6, 9, 11]
+        self.theta = 0
+        self.v_theta = 1/ (5 * self.dt * self.freq) 
+
+        gate_indices = [3, 6, 9,11, 12]
         self.gate_thetas = [ts[i] for i in gate_indices]
-        self.gate_peak_weights = [40, 80, 60, 60]
+        self.gate_peak_weights = [40, 80, 60,110, 10] 
+
 
         # Create the optimal control problem solver
         self.acados_ocp_solver, self.ocp = create_ocp_solver(self.T_HORIZON, self.N)
@@ -106,7 +117,8 @@ class MPController(Controller):
 
 
 
-        _,_,min_theta = self.compute_min_distance_to_trajectory(obs["pos"])
+        min_dist,_,min_theta = self.compute_min_distance_to_trajectory(obs["pos"])
+
 
 
         # Prepare reference trajectory and weights for all steps in the horizon
@@ -115,11 +127,11 @@ class MPController(Controller):
             theta_j_next = min(theta_j + 0.0001, 1.0)
             theta_min_j = min(min_theta + j * self.v_theta * self.dt, 1.0)
 
+
             p_ref = np.array([
             self.cs_x(theta_j), self.cs_y(theta_j), self.cs_z(theta_j), # for contouring
             self.cs_x(theta_j_next), self.cs_y(theta_j_next), self.cs_z(theta_j_next), #for contouring
-
-            self.get_weight(theta_j),   # for gauss weighting
+            self.get_weight(theta_min_j),   # for gauss weighting
             self.cs_x(theta_min_j), self.cs_y(theta_min_j), self.cs_z(theta_min_j) # for real minimun distance
             ])
             self.acados_ocp_solver.set(j, "p", p_ref)
@@ -128,15 +140,24 @@ class MPController(Controller):
         # Solve the MPC problem
         self.acados_ocp_solver.solve()
         x1 = self.acados_ocp_solver.get(1, "x")
+        u1 = self.acados_ocp_solver.get(1, "u")
+
+        # print u1
+        input_names = ["df_cmd", "dr_cmd", "dp_cmd", "dy_cmd", "dv_theta_cmd"]
+        for name, value in zip(input_names, u1):
+            print(f"{name}: {value:.8f}")
+
+        print("=" * 20)
 
         # print_output(tick=self._tick, obs=obs, freq=self.config.env.freq)
-        # state_names = ["px", "py", "pz", "vx", "vy", "vz", "roll", "pitch", "yaw",
-        #                "f_collective", "f_collective_cmd", "r_cmd", "p_cmd", "y_cmd",
-        #                "theta", "v_theta"]
-        # for name, value in zip(state_names, x1):
-        #     print(f"{name}: {value}")
-
-        # print(f"weight: {self.get_weight(self.theta):.2f}")
+        state_names = ["px", "py", "pz", "vx", "vy", "vz", "roll", "pitch", "yaw",
+                       "f_collective", "f_collective_cmd", "r_cmd", "p_cmd", "y_cmd",
+                       "theta", "v_theta"]
+        for name, value in zip(state_names, x1):
+            print(f"{name}: {value}")
+        
+        # # print(f"weight: {self.get_weight(min_theta):.2f}")
+        # print(f"min_dist: {min_dist:.2f} at theta: {min_theta:.2f}")
         # print(f"Time: {self._tick/self.freq:.2f}s")
         # print("=" * 20)
 
@@ -146,9 +167,10 @@ class MPController(Controller):
         self.last_f_cmd = x1[10]
         self.last_rpy_cmd = x1[11:14]  
 
- 
-        self.theta += self.v_theta * self.dt  # Update theta based on v_theta and dt
-        self.v_theta = x1[15]
+        self.v_theta = x1[15] 
+        self.theta = min(1.0, self.theta + self.v_theta * self.dt)
+  
+  
   
 
         cmd = x1[10:14]
@@ -313,8 +335,8 @@ class MPController(Controller):
         Gibt das Gewicht w(theta) zurück, das mindestens base_weight ist
         und an jedem Gate auf bis zu gate_peak_weights[i] ansteigt.
         """
-        base_weight = 4.0
-        sigma       = 0.02
+        base_weight = 20
+        sigma       = 0.05
 
         w = base_weight
         # Durchlaufe Gates und zugehörige Spitzengewichte

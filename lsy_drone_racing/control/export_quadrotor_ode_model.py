@@ -46,16 +46,17 @@ def export_quadrotor_ode_model():
     dv_theta_cmd = SX.sym("dv_theta_cmd") 
 
     # parameter
-    x_ref = SX.sym("x_ref")
-    y_ref = SX.sym("y_ref")
-    z_ref = SX.sym("z_ref")
-    x_ref_next = SX.sym("x_ref_next")
-    y_ref_next = SX.sym("y_ref_next")
-    z_ref_next = SX.sym("z_ref_next")
-    weight = SX.sym("weight")  # Weight for minimum distance to trajectory
-    x_ref_min = SX.sym("x_ref_min")
-    y_ref_min = SX.sym("y_ref_min")
-    z_ref_min = SX.sym("z_ref_min")
+    x_ref = SX.sym("x_ref") #0
+    y_ref = SX.sym("y_ref") #1
+    z_ref = SX.sym("z_ref") #2
+    x_ref_next = SX.sym("x_ref_next") #3
+    y_ref_next = SX.sym("y_ref_next") #4
+    z_ref_next = SX.sym("z_ref_next") #5
+    weight = SX.sym("weight")  # Weight for minimum distance to trajectory #6
+    x_ref_min = SX.sym("x_ref_min") #7
+    y_ref_min = SX.sym("y_ref_min") #8
+    z_ref_min = SX.sym("z_ref_min") #9
+
     
 
     

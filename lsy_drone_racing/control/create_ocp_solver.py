@@ -44,9 +44,11 @@ def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosO
     ocp.cost.cost_type_e = 'EXTERNAL'
     
 
-    q_c = 40 # contour error
-    q_l = 60 # lag error
-    mu = 0.00065 # progress
+    q_c = 60 # contour error
+    q_l = 40 # lag error
+    # mu = 0.00065 # progress
+    #mu = 0.0008
+    mu = 0.0006
     q_min = p[6]  # gaussian weight
 
 
@@ -60,7 +62,7 @@ def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosO
 
 
     # Inputs
-    q_u_vec = DM([0.01, 0.05, 0.05, 0.05, 0.04])  # Gewichtung für df_cmd, dr_cmd, dp_cmd, dy_cmd, dv_theta_cmd
+    q_u_vec = DM([0.02, 0.05, 0.05, 0.05, 0.05])  # Gewichtung für df_cmd, dr_cmd, dp_cmd, dy_cmd, dv_theta_cmd
     weighted_squares = q_u_vec * (u**2)
     control_cost = sum1(weighted_squares)
 
@@ -68,6 +70,7 @@ def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosO
     # Set cost funnction
     ocp.model.cost_expr_ext_cost    = q_c * e_c**2 + q_l * e_l**2   - mu * x[15]   + q_min * min_distance**2   + control_cost     #+ hover_error**2 + hover_error_cmd**2 
     ocp.model.cost_expr_ext_cost_e  = q_c * e_c**2 + q_l * e_l**2   - mu * x[15]   + q_min * min_distance**2
+
 
     
 
@@ -84,7 +87,7 @@ def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosO
     ocp.solver_options.qp_solver = "PARTIAL_CONDENSING_HPIPM" # FULL_CONDENSING_HPIPM
     ocp.solver_options.hessian_approx = "GAUSS_NEWTON"  # GAUSqcS_NEWTON
     ocp.solver_options.integrator_type = "ERK"
-    ocp.solver_options.nlp_solver_type = "SQP"  # SQP_RTI
+    ocp.solver_options.nlp_solver_type = "SQP_RTI"  # SQP_RTI
     ocp.solver_options.tf = Tf
     ocp.solver_options.qp_solver_warm_start = 1
     ocp.solver_options.qp_solver_cond_N = N
