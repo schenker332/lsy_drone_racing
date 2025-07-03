@@ -8,7 +8,6 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 from lsy_drone_racing.control.create_ocp_solver import create_ocp_solver
 from lsy_drone_racing.control.helper.print_output import print_output
-from lsy_drone_racing.control.arc_length_parametrization import arc_length_parametrization
 
 
 
@@ -28,96 +27,55 @@ class MPController(Controller):
         self._tick = 0
 
         # MPC parameters
-        self.N = 25                    # Number of discretization steps
-        self.T_HORIZON = 1           # Time horizon in seconds
+        self.N = 50                    # Number of discretization steps
+        self.T_HORIZON = 1.5           # Time horizon in seconds
         self.dt = self.T_HORIZON / self.N  # Step size
 
-        # Track waypoints with gates labeled
         waypoints = np.array(
         [
-            [1.0, 1.5, 0.3],
+            [1.0, 1.5, 0.2],
             [0.8, 1.0, 0.2],
             [0.7, 0.1, 0.4],
             [0.45, -0.5, 0.56],  # gate1
             [0.2, -0.7, 0.65],
             [0.5, -1.5, 0.8],
-            [1, -1.05, 1.11],    # gate2
+            [1, -1.05, 1.2],    # gate2
             [1.15, -0.75, 1],
             [0.5, 0, 0.8],
             [0, 1, 0.56],        # gate3
-            [-0.1, 1.2, 0.56],
-            [-0.3, 1.2, 1.1],
-            [-0.2, 0.4, 1.1],
-            [-0.45, 0.1, 1.11],
+            [-0.2, 1.4, 0.56],
+            [-0.9, 1.3, 0.8], 
             [-0.5, 0, 1.11],     # gate4
-            [-0.5, -0.2, 1.11],
+            [-0.6, -2, 1.11] # point after gate for clean trajectory to finish 
+            ### LEARNING: Last poun needs to be really far out for a smooth trajectory though the gate (at least with our current trajectory calculation)
+
         ])
+
+
+
         
         
-        # ======================== old trajectory ==================== ###
-        # ts = np.linspace(0, 1, np.shape(waypoints)[0])
-        # cs_x = CubicSpline(ts, waypoints[:, 0])
-        # cs_y = CubicSpline(ts, waypoints[:, 1])
-        # cs_z = CubicSpline(ts, waypoints[:, 2])
-
-        # # Generate time-based reference trajectory
-        # self._des_completion_time =  
-        # ts = np.linspace(0, 1, int(self.freq * self._des_completion_time))
-        # self.x_des = cs_x(ts)
-        # self.y_des = cs_y(ts)
-        # self.z_des = cs_z(ts)
-        # ========================= old trajectory ==================== ###
+        ts = np.linspace(0, 1, np.shape(waypoints)[0])
+        self.cs_x = CubicSpline(ts, waypoints[:, 0])
+        self.cs_y = CubicSpline(ts, waypoints[:, 1])
+        self.cs_z = CubicSpline(ts, waypoints[:, 2])
 
 
+        self.theta = 0
+        self.v_theta = 1/ (5 * self.dt * self.freq) 
 
-        # ### ==================== new trajectory ==================== ###
+        gate_indices = [3, 6, 9, 11, 12]
+        self.gate_thetas = [ts[i] for i in gate_indices]
+        ### LEARNING: Weights that are higher than 60 can cause huge issues, 
+        # if the drone is not able to get the curve (i.e. reversing back, crashing into the gate, 
+        # or deliberately missting the gate to avoid a high off-center penalty)
+        self.gate_peak_weights = [35, 50, 60, 5, 50] 
 
-
-        # --- VERSION 1: Current Arc-Length Parametrization (Comment out to test Version 2) ---
-        theta_k_values, x_vals, y_vals, z_vals, _, _, _,_,_ = arc_length_parametrization(waypoints, num_samples=1000)
-
-        # --- VERSION 2: Simpler Time-Based Parametrization similar to old one (Uncomment to test) ---
-        # # This ignores true distance and can create a smoother, but less accurate, path.
-        # # It's a good diagnostic tool.
-        # num_waypoints = waypoints.shape[0]
-        # t_values = np.linspace(0, 1, num_waypoints) # Dummy "time" parameter from 0 to 1
-        # x_vals = waypoints[:, 0]
-        # y_vals = waypoints[:, 1]
-        # z_vals = waypoints[:, 2]
-        # # rename t_values to theta_k_values to avoid changing the rest of the code.
-        # theta_k_values = t_values
-
-
-
-        ### new ###  Store path for progress estimation
-        self.theta_grid = theta_k_values
-        self.path_points = np.vstack((x_vals, y_vals, z_vals)).T
-
-        self.cs_x = CubicSpline(theta_k_values, x_vals)
-        self.cs_y = CubicSpline(theta_k_values, y_vals)
-        self.cs_z = CubicSpline(theta_k_values, z_vals)
-
-        self.theta = 0.0        # Fortschrittsstartwert
-        # self.v_theta = 0.1      # Fortschrittsgeschwindigkeit 0.66 theta/s
-
-        # Initialize progress state variables
-        self.last_theta = 0.0
-        self.last_vtheta = 0.0
-
-        # self.time = 8
-        # self.v_theta = 1 / (self.time * self.dt * self.freq)
-
-        ### ==================================================================== ###
-
-
-
-
-       
 
         # Create the optimal control problem solver
         self.acados_ocp_solver, self.ocp = create_ocp_solver(self.T_HORIZON, self.N)
 
-        # Initialize state variables
+        # Initialize state variables    
         self.last_f_collective = 0.3  # Current thrust value
         self.last_f_cmd = 0.3     # Commanded thrust value
         self.last_rpy_cmd = np.zeros(3)  # Commanded roll, pitch, yaw
@@ -144,224 +102,79 @@ class MPController(Controller):
         Returns:
             The collective thrust and orientation [t_des, r_des, p_des, y_des] as a numpy array.
         """
-        # # Get the current reference point index based on timing
-        # i = min(self._tick, len(self.x_des) - 1)
-        # if self._tick > i:
-        #     self.finished = True
 
         if self.theta >= 1.2:
             self.finished = True
             
-        print_output(tick=self._tick, obs=obs, freq=self.config.env.freq)
-        # Convert quaternion to roll-pitch-yaw angles
-        rpy = R.from_quat(obs["quat"]).as_euler("xyz", degrees=False)
 
-        ### new --- Project current position onto path to get current_theta ---
-        dists = np.linalg.norm(self.path_points - obs["pos"], axis=1)
-        current_theta = self.theta_grid[np.argmin(dists)]
+
 
         # Construct the current state vector for the MPC solver
-        xcurrent = np.concatenate((obs["pos"], obs["vel"], rpy, [self.last_f_collective, self.last_f_cmd], self.last_rpy_cmd, [current_theta, self.last_vtheta] ))
+        xcurrent = np.concatenate((obs["pos"], obs["vel"],  R.from_quat(obs["quat"]).as_euler("xyz", degrees=False), [self.last_f_collective, self.last_f_cmd], self.last_rpy_cmd, [ self.theta, self.v_theta]) )
         self.acados_ocp_solver.set(0, "lbx", xcurrent)
         self.acados_ocp_solver.set(0, "ubx", xcurrent)
 
 
 
-        ### ====================== old trajectory + old cost function ==================== ###
-        # # Set reference trajectory for each step in the prediction horizon
-        # for j in range(self.N):
-        #     idx = min(i + j, len(self.x_des) - 1)
-        #     yref = np.array([self.x_des[idx], self.y_des[idx], self.z_des[idx], 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.35, 0.35, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
-        #     self.acados_ocp_solver.set(j, "yref", yref)
-
-        # # Set terminal state reference
-        # idx_N = min(i + self.N, len(self.x_des) - 1)
-        # yref_N = np.array([self.x_des[idx_N], self.y_des[idx_N], self.z_des[idx_N], 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.35, 0.35, 0.0, 0.0, 0.0])
-        # self.acados_ocp_solver.set(self.N, "yref", yref_N)
-        # ### ================================================================ ###
+        min_dist,_,min_theta = self.compute_min_distance_to_trajectory(obs["pos"])
 
 
 
-        ## ==================== new trajectory + old cost function ==================== ###
-
-        # for j in range(self.N):
-        #     theta_j = min(self.theta + j * self.v_theta * self.dt, 1.0)
-
-        #     xj = self.cs_x(theta_j)
-        #     yj = self.cs_y(theta_j)
-        #     zj = self.cs_z(theta_j)
-
-        #     yref = np.array([
-        #         xj, yj, zj, 
-        #         0.0, 0.0, 0.0,  # vels
-        #         0.0, 0.0, 0.0,  # rpy
-        #         0.35, 0.35,     # collective + f_cmd
-        #         0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0  # rest
-        #     ])
-        #     self.acados_ocp_solver.set(j, "yref", yref)
+        # Prepare reference trajectory and weights for all steps in the horizon
+        for j in range(self.N + 1):
+            theta_j = min(self.theta + j * self.v_theta * self.dt, 1.0)
+            theta_j_next = min(theta_j + 0.0001, 1.0)
+            theta_min_j = min(min_theta + j * self.v_theta * self.dt, 1.0)
 
 
-
-        # theta_N = min(self.theta + self.N * self.v_theta * self.dt, 1.0)
-        # xN = self.cs_x(theta_N)
-        # yN = self.cs_y(theta_N)
-        # zN = self.cs_z(theta_N)
-
-        # yref_N = np.array([xN, yN, zN, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.35, 0.35, 0.0, 0.0, 0.0])
-        # self.acados_ocp_solver.set(self.N, "yref", yref_N)
-
-        ## ================================================================== ###
-
-
-
-        ### =================== old trajectory + new cost function ==================== ###
-        # for j in range(self.N):
-        #     idx = min(i + j, len(self.x_des) - 1)
-        #     xj = self.x_des[idx]
-        #     yj = self.y_des[idx]
-        #     zj = self.z_des[idx]
-
-        #     idx_next = min(idx + 1, len(self.x_des) - 1)
-        #     xj_next = self.x_des[idx_next]
-        #     yj_next = self.y_des[idx_next]
-        #     zj_next = self.z_des[idx_next]
-
-        #     p_ref = np.array([xj, yj, zj, xj_next, yj_next, zj_next])
-        #     self.acados_ocp_solver.set(j, "p", p_ref)
-
-
-        # # Set terminal state reference
-        # idx_N = min(i + self.N, len(self.x_des) - 1)
-
-        # xN = self.x_des[idx_N]
-        # yN = self.y_des[idx_N]
-        # zN = self.z_des[idx_N]
-
-        # idx_N_next = min(idx_N + 1, len(self.x_des) - 1)
-        # xN_next = self.x_des[idx_N_next]
-        # yN_next = self.y_des[idx_N_next]
-        # zN_next = self.z_des[idx_N_next]
-
-        # p_ref_N = np.array([xN, yN, zN, xN_next, yN_next, zN_next])
-        # self.acados_ocp_solver.set(self.N, "p", p_ref_N)
-        # ### ================================================================== ###
-
-
-
-        ### =================== new trajectory + new cost function ==================== ###
-
-        ### Predict theta for the horizon based on the last optimal velocity
-        # this will produce the following ouput: first this: [0, v·dt, 2v·dt, …, (N+1)v·dt].
-        # then this with the addition of thetha: [θ₀, θ₀ + v·dt, θ₀ + 2v·dt, …]
-
-        # # old too much corner cutting
-        # theta_prediction = current_theta + self.last_vtheta * np.arange(self.N + 2) * self.dt 
-
-
-
-        # New.. to create a smooth and stable reference for the current step,
-        # always re-anchoring the plan to the drone's actual position.
-        try:
-            # 1. Extract the optimal velocity profile from the previous solution.
-            vtheta_profile = np.zeros(self.N)
-            for j in range(self.N):
-                x_pred = self.acados_ocp_solver.get(j + 1, "x") # Get plan for steps 1...N
-                vtheta_profile[j] = x_pred[15]
-
-            # 2. Integrate this velocity profile to get the new reference path.
-            # We need N+2 points for the loop setting parameters up to the terminal stage.
-            theta_prediction = np.zeros(self.N + 2)
-            theta_prediction[0] = current_theta  # CRITICAL: Anchor plan to reality.
-
-            for j in range(self.N + 1):
-                # Use the velocity from the profile, or the last one if we're at the end.
-                v_step = vtheta_profile[j] if j < self.N else vtheta_profile[-1]
-                theta_prediction[j+1] = theta_prediction[j] + v_step * self.dt
-
-        except Exception:
-            # Fallback for the very first run when no previous solution exists.
-            # Predict using a simple constant velocity, anchored to the current position.
-            theta_prediction = current_theta + self.last_vtheta * np.arange(self.N + 2) * self.dt
-
-
-        for j in range(self.N):
-            # ### old version ###
-            # theta_j = min(self.theta + j * self.v_theta * self.dt, 1.0)
-            # theta_j_next = min(self.theta + (j + 1) * self.v_theta * self.dt, 1.0)
-
-            ### new version ###
-            theta_j = min(theta_prediction[j], 1.0)
-            theta_j_next = min(theta_prediction[j + 1], 1.0)
-
-            xj = self.cs_x(theta_j)
-            yj = self.cs_y(theta_j)
-            zj = self.cs_z(theta_j)
-
-            xj_next = self.cs_x(theta_j_next)
-            yj_next = self.cs_y(theta_j_next)
-            zj_next = self.cs_z(theta_j_next)
-
-            p_ref = np.array([xj, yj, zj, xj_next, yj_next, zj_next])
+            p_ref = np.array([
+            self.cs_x(theta_j), self.cs_y(theta_j), self.cs_z(theta_j), # for contouring
+            self.cs_x(theta_j_next), self.cs_y(theta_j_next), self.cs_z(theta_j_next), #for contouring
+            self.get_weight(theta_min_j),   # for gauss weighting
+            self.cs_x(theta_min_j), self.cs_y(theta_min_j), self.cs_z(theta_min_j) # for real minimun distance
+            ])
             self.acados_ocp_solver.set(j, "p", p_ref)
-
-
-
-        # ### old
-        # theta_N = min(self.theta + self.N * self.v_theta * self.dt, 1.0)
-        # theta_N_plus = min(self.theta + (self.N + 1) * self.v_theta * self.dt, 1.0)
-        theta_N = min(theta_prediction[self.N], 1.0)
-        theta_N_plus = min(theta_prediction[self.N+1], 1.0)
-
-
-        xN = self.cs_x(theta_N)
-        yN = self.cs_y(theta_N)
-        zN = self.cs_z(theta_N)
-
-        xN_next = self.cs_x(theta_N_plus)
-        yN_next = self.cs_y(theta_N_plus)
-        zN_next = self.cs_z(theta_N_plus)
-
-        p_ref_N = np.array([xN, yN, zN, xN_next, yN_next, zN_next])
-        self.acados_ocp_solver.set(self.N, "p", p_ref_N)
-        # # ### ================================================================ ###
-
-
-
-
-
-
-        ####============================================================================================
-        # Store previous theta to track progress milestones
-        if not hasattr(self, 'last_progress_milestone'):
-            self.last_progress_milestone = 0.0
-
-
-        ####============================================================================================
-        ### New ### The theta value is now part of the optimization problem and does not need to be manually updated here.
-        ####============================================================================================
-        # # Update theta value
-        # self.theta = min(self.theta + self.v_theta * self.dt, 1.0)
-
-
-
-
 
 
         # Solve the MPC problem
         self.acados_ocp_solver.solve()
-        # total_cost = self.acados_ocp_solver.get_cost()
-        # print(f"Solver Kosten: {total_cost:.4f}")
         x1 = self.acados_ocp_solver.get(1, "x")
-        # Apply low-pass filter to thrust for smoother control
+        u1 = self.acados_ocp_solver.get(1, "u")
+
+        ### Debugging block for flying commands
+
+        # Debugging of  feedback law i.e print u1
+        # input_names = ["df_cmd", "dr_cmd", "dp_cmd", "dy_cmd", "dv_theta_cmd"]
+        # for name, value in zip(input_names, u1):
+        #     print(f"{name}: {value:.8f}")
+
+        # print("=" * 20)
+
+       
+        # print_output(tick=self._tick, obs=obs, freq=self.config.env.freq)
+        
+        ## Debugging prinzs for state variables
+        state_names = ["px", "py", "pz", "vx", "vy", "vz", "roll", "pitch", "yaw",
+                       "f_collective", "f_collective_cmd", "r_cmd", "p_cmd", "y_cmd",
+                       "theta", "v_theta"]
+        
+        # for name, value in zip(state_names, x1):
+        #     print(f"{name}: {value}")
+        
+        # # print(f"weight: {self.get_weight(min_theta):.2f}")
+        # print(f"min_dist: {min_dist:.2f} at theta: {min_theta:.2f}")
+        # print(f"Time: {self._tick/self.freq:.2f}s")
+        # print("=" * 20)
+
+
         w = 1 / self.config.env.freq / self.dt
         self.last_f_collective = self.last_f_collective * (1 - w) + x1[9] * w
         self.last_f_cmd = x1[10]
-        self.last_rpy_cmd = x1[11:14]
-        ### new  for MPCC
-        self.last_theta = x1[14] # Update from solver result
-        self.last_vtheta = x1[15] # Update from solver result
+        self.last_rpy_cmd = x1[11:14]  
 
-        # Extract command (collective thrust and roll/pitch/yaw)
+        self.v_theta = x1[15] 
+        self.theta = min(1.0, self.theta + self.v_theta * self.dt)
+
         cmd = x1[10:14]
         
         return cmd
@@ -441,3 +254,97 @@ class MPController(Controller):
             horizon_positions.append(pos)
         
         return np.array(horizon_positions)
+    
+
+
+    def compute_min_distance_to_trajectory(self, drone_pos):
+        """
+        Berechnet den minimalen Abstand der Drohne zur Trajektorie,
+        indem nur der Bereich hinter dem aktuellen Theta durchsucht wird.
+        
+        Args:
+            drone_pos: Position der Drohne als np.array([x, y, z])
+            
+        Returns:
+            tuple: (minimaler Abstand, Position des nächsten Punkts)
+        """
+        # Aktueller Referenzpunkt als obere Grenze der Suche
+        current_theta = self.theta
+        
+        # Parameter für die Suche
+        search_range = 0.1  # Wie weit zurück suchen (in theta-Einheiten)
+        coarse_samples = 10  # Anzahl grober Samples für erste Suche
+        fine_samples = 10     # Anzahl feiner Samples für die Verfeinerung
+        
+        # Definiere den Suchbereich (nur nach hinten)
+        search_start = max(0.0, current_theta - search_range)
+        search_end = current_theta  # Endet beim aktuellen Punkt
+        
+        # 1. Grobe Suche
+        min_dist = float('inf')
+        min_theta = current_theta
+        
+        # Überspringe die Suche, wenn wir am Anfang der Trajektorie sind
+        if search_start >= search_end:
+            # Berechne Abstand zum Anfangspunkt
+            pos_x = self.cs_x(0)
+            pos_y = self.cs_y(0)
+            pos_z = self.cs_z(0)
+            traj_pos = np.array([pos_x, pos_y, pos_z])
+            return np.linalg.norm(drone_pos - traj_pos), traj_pos, 0
+        
+        # Grobe Abtastung des Suchbereichs
+        theta_values = np.linspace(search_start, search_end, coarse_samples)
+        for theta in theta_values:
+            # Berechne Position auf der Trajektorie
+            pos_x = self.cs_x(theta)
+            pos_y = self.cs_y(theta)
+            pos_z = self.cs_z(theta)
+            traj_pos = np.array([pos_x, pos_y, pos_z])
+            
+            # Berechne Abstand
+            dist = np.linalg.norm(drone_pos - traj_pos)
+            
+            # Aktualisiere Minimum
+            if dist < min_dist:
+                min_dist = dist
+                min_theta = theta
+                min_traj_pos = traj_pos
+        
+        # 2. Feine Suche
+        fine_search_start = max(0.0, min_theta - search_range/coarse_samples)
+        fine_search_end = min(current_theta, min_theta + search_range/coarse_samples)
+        
+        # Feine Abtastung des eingegrenzten Bereichs
+        fine_theta_values = np.linspace(fine_search_start, fine_search_end, fine_samples)
+        for theta in fine_theta_values:
+            pos_x = self.cs_x(theta)
+            pos_y = self.cs_y(theta)
+            pos_z = self.cs_z(theta)
+            traj_pos = np.array([pos_x, pos_y, pos_z])
+            
+            dist = np.linalg.norm(drone_pos - traj_pos)
+            if dist < min_dist:
+                min_dist = dist
+                min_traj_pos = traj_pos
+                min_theta = theta
+        
+        return min_dist, min_traj_pos, min_theta
+    
+
+    def get_weight(self, theta: float) -> float:
+        """
+        Gibt das Gewicht w(theta) zurück, das mindestens base_weight ist
+        und an jedem Gate auf bis zu gate_peak_weights[i] ansteigt.
+        """
+        base_weight = 20
+        sigma       = 0.05
+
+        w = base_weight
+        # Durchlaufe Gates und zugehörige Spitzengewichte
+        for gθ, peak_w in zip(self.gate_thetas, self.gate_peak_weights):
+            diff      = theta - gθ
+            influence = (peak_w - base_weight) * np.exp(-0.5 * (diff/sigma)**2)
+            w         = max(w, base_weight + influence)
+
+        return w

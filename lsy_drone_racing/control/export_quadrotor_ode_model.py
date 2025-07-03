@@ -1,7 +1,6 @@
 from __future__ import annotations
 from acados_template import AcadosModel
-from casadi import  cos, sin, vertcat, SX, sumsqr
-from lsy_drone_racing.control.helper.costfunction import create_tracking_cost_function
+from casadi import  cos, sin, vertcat, SX
 
 def export_quadrotor_ode_model():
     """Create and export a quadrotor ODE model for use with acados.
@@ -15,64 +14,69 @@ def export_quadrotor_ode_model():
     model_name = "lsy_example_mpc"
 
     # Physical parameters
-    GRAVITY = 9.81
+    GRAVITY = 9.81 # m/s^2, gravitational acceleration
     params_pitch_rate = [-6.003842038081178, 6.213752925707588]
     params_roll_rate = [-3.960889336015948, 4.078293254657104]
     params_yaw_rate = [-0.005347588299390372, 0.0]
     params_acc = [20.907574256269616, 3.653687545690674]
     
-    # Define states
-    px = SX.sym("px")
-    py = SX.sym("py")
-    pz = SX.sym("pz")
-    vx = SX.sym("vx")
-    vy = SX.sym("vy")
-    vz = SX.sym("vz")
+    # state
+    px = SX.sym("px") #0
+    py = SX.sym("py") #1
+    pz = SX.sym("pz") #2
+    vx = SX.sym("vx") #3
+    vy = SX.sym("vy") #4
+    vz = SX.sym("vz") #5
+    roll = SX.sym("r") #6
+    pitch = SX.sym("p") #7
+    yaw = SX.sym("y") #8
+    f_collective = SX.sym("f_collective") #9
+    f_collective_cmd = SX.sym("f_collective_cmd") #10
+    r_cmd = SX.sym("r_cmd") #11
+    p_cmd = SX.sym("p_cmd") #12
+    y_cmd = SX.sym("y_cmd") #13
+    theta = SX.sym("theta") #14
+    v_theta = SX.sym("v_theta") #15
 
-    roll = SX.sym("r")
-    pitch = SX.sym("p")
-    yaw = SX.sym("y")
-    f_collective = SX.sym("f_collective")
-
-
-
-    f_collective_cmd = SX.sym("f_collective_cmd")
-    r_cmd = SX.sym("r_cmd")
-    p_cmd = SX.sym("p_cmd")
-    y_cmd = SX.sym("y_cmd")
-
-    # Define additional states for MPCC progress penalisation
-    theta = SX.sym("theta")  
-    v_theta = SX.sym("v_theta")  
-    dv_theta_cmd = SX.sym("dv_theta_cmd") 
-    
-    # Define inputs
+    # input
     df_cmd = SX.sym("df_cmd")
     dr_cmd = SX.sym("dr_cmd")
     dp_cmd = SX.sym("dp_cmd")
     dy_cmd = SX.sym("dy_cmd")
+    dv_theta_cmd = SX.sym("dv_theta_cmd") 
 
-    # Reference points (for trajectory tracking)
-    x_ref = SX.sym("x_ref")
-    y_ref = SX.sym("y_ref")
-    z_ref = SX.sym("z_ref")
-    x_ref_next = SX.sym("x_ref_next")
-    y_ref_next = SX.sym("y_ref_next")
-    z_ref_next = SX.sym("z_ref_next")
+    # parameter
+    x_ref = SX.sym("x_ref") #0
+    y_ref = SX.sym("y_ref") #1
+    z_ref = SX.sym("z_ref") #2
+    x_ref_next = SX.sym("x_ref_next") #3
+    y_ref_next = SX.sym("y_ref_next") #4
+    z_ref_next = SX.sym("z_ref_next") #5
+    weight = SX.sym("weight")  # Weight for minimum distance to trajectory #6
+    x_ref_min = SX.sym("x_ref_min") #7
+    y_ref_min = SX.sym("y_ref_min") #8
+    z_ref_min = SX.sym("z_ref_min") #9
+
     
-
 
     
     # State and input vectors
     states = vertcat(
-        px, py, pz, vx, vy, vz, roll, pitch, yaw,
-        f_collective, f_collective_cmd, r_cmd, p_cmd, y_cmd,
-        theta,
-        v_theta
+        px, py, pz, # 0 , 1, 2
+        vx, vy, vz, # 3, 4, 5
+        roll, pitch, yaw, # 6, 7, 8
+        f_collective, f_collective_cmd, r_cmd, # 9, 10, 11
+        p_cmd, y_cmd, # 12, 13
+        theta, v_theta # 14, 15
+
     )
-    #control inputs to the drone
-    controls = vertcat(df_cmd, dr_cmd, dp_cmd, dy_cmd, dv_theta_cmd)
-    p = vertcat(x_ref, y_ref, z_ref, x_ref_next, y_ref_next, z_ref_next)
+    controls = vertcat(df_cmd, dr_cmd, dp_cmd, # 0, 1, 2
+                       dy_cmd, dv_theta_cmd) # 3, 4
+    
+    p = vertcat(x_ref, y_ref, z_ref, # 0, 1, 2
+                 x_ref_next, y_ref_next, z_ref_next, # 3, 4, 5
+                   weight, x_ref_min, y_ref_min, # 6, 7, 8
+                   z_ref_min) # 9
 
     # System dynamics
     f_expl = vertcat(
@@ -90,31 +94,11 @@ def export_quadrotor_ode_model():
         dr_cmd,
         dp_cmd,
         dy_cmd,
-        v_theta,        # Dynamics for theta: θ̇ = v_theta
-        dv_theta_cmd    # Dynamics for v_theta: v̇_theta = dv_theta_cmd
+        v_theta,  # theta_dot = v_theta
+        dv_theta_cmd,  # v_theta_dot = dv_theta_cmd
     )
 
-    ### Added for custom cost function ###
-    # Set weights for the cost function
-    q_c = 60000 # Weight for contour error (1100)
-    q_l = 300  # Weight for lag error (8000)
-    q_u = 0.0002  # Weight for control inputs
-    q_vtheta = 1 # Penalty on high progress velocity
-    mu = 0.60   # Weight for progress reward (mu)
 
-
-    # ## experimental
-    # q_att_cmd = 25.0 #Add a new, significant penalty on large roll/pitch commands.
-    #  # Set the cost expressions
-    # # Definiere Steuerungskosten für CasADi-Objekte 
-    # attitude_cmd_cost = q_att_cmd * (r_cmd**2 + p_cmd**2)
-
-
-
-     # Set the cost expressions
-    # Definiere Steuerungskosten für CasADi-Objekte korrekt
-
-    control_cost = q_u * sumsqr(controls)
 
     
     # Create the AcadosModel
@@ -124,14 +108,5 @@ def export_quadrotor_ode_model():
     model.u = controls
     model.p = p
     model.name = model_name
-
-    # ### ==================== new costfunction ==================== ###
-    # Erzeuge Kostenfunktion
-    e_cont, e_lag, e_cont_e, e_lag_e = create_tracking_cost_function(model)
-
-     # In create_ocp_solver.py  definition of our stage cost function
-    model.cost_expr_ext_cost = q_c * e_cont**2 + q_l * e_lag**2 - mu * v_theta + q_vtheta * v_theta**2 + control_cost # experimental (did not really help)+ attitude_cmd_cost
-    # Definition of the stage cost function for the terminal stage
-    model.cost_expr_ext_cost_e = q_c * e_cont**2 + q_l * e_lag**2
 
     return model

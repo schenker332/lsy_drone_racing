@@ -31,10 +31,110 @@ class SimVisualizer:
             last_obstacles_positions: Dictionary of last known obstacle positions
             obstacle_update_points: List of positions where obstacles were updated
         """
-        from lsy_drone_racing.utils import draw_line, draw_gates, draw_point, draw_obstacles, generate_parallel_lines
+        from lsy_drone_racing.utils import  draw_gates, draw_point, draw_obstacles, generate_parallel_lines,draw_line
         
         # Record current drone position (ground truth state)
         flown_positions.append(obs["pos"])
+
+        # Visualisiere den aktuellen theta-Referenzpunkt als Ball auf der Trajektorie
+        theta = controller.theta
+        ref_x = controller.cs_x(theta)
+        ref_y = controller.cs_y(theta)
+        ref_z = controller.cs_z(theta)
+        ref_point = np.array([ref_x, ref_y, ref_z])
+
+        theta_next = theta + 0.0001
+        next_x = controller.cs_x(theta_next)
+        next_y = controller.cs_y(theta_next)
+        next_z = controller.cs_z(theta_next)
+        next_point = np.array([next_x, next_y, next_z])
+
+        
+        # Zeichne einen auffälligen Ball an der Referenzposition
+        draw_point(env, ref_point, 
+                    size=0.01,  # Größerer Ball für bessere Sichtbarkeit
+                    rgba=np.array([1.0, 1.0, 0.0, 0.8]))  # Gelb
+        
+
+
+        
+        # Berechne Tangentenvektor t_hat
+        tangent = next_point - ref_point
+        t_hat = tangent / (np.linalg.norm(tangent) + 1e-10)
+        
+        # Aktuelle Drohnenposition
+        drone_pos = obs["pos"]
+        
+        # Fehlervektor e = pos - ref
+        e_vec = drone_pos - ref_point
+        
+        # Berechne Contour Error (e_c) und Lag Error (e_l)
+        e_l_scalar = np.dot(t_hat, e_vec)  # Projektion auf Tangente
+        e_l_vec = e_l_scalar * t_hat        # Vektor in Tangentenrichtung
+        e_c_vec = e_vec - e_l_vec           # Orthogonaler Vektor
+        
+        # Skaliere Vektoren für bessere Visualisierung
+        scale_factor = 1
+        t_hat_scaled = ref_point + t_hat * scale_factor
+        e_l_vis = ref_point + e_l_vec
+        e_c_vis = ref_point + e_c_vec
+        
+        # Zeichne den Tangentenvektor (blau)
+        draw_line(env, np.vstack([ref_point, t_hat_scaled]),
+                rgba=np.array([0.0, 0.0, 1.0, 1.0]),  # Blau
+                min_size=2.0, max_size=2.0)
+        
+        # Zeichne den Fehlervektor e (rot)
+        draw_line(env, np.vstack([ref_point, drone_pos]),
+                rgba=np.array([1.0, 0.0, 0.0, 1.0]),  # Rot
+                min_size=2.0, max_size=2.0)
+        
+        # Zeichne den Contour Error Vektor e_c (grün)
+        draw_line(env, np.vstack([ref_point, e_c_vis]),
+                rgba=np.array([0.0, 1.0, 0.0, 1.0]),  # Grün
+                min_size=2.0, max_size=2.0)
+        
+        # Zeichne den Lag Error Vektor e_l (magenta)
+        draw_line(env, np.vstack([ref_point, e_l_vis]),
+                rgba=np.array([1.0, 0.0, 1.0, 1.0]),  # Magenta
+                min_size=2.0, max_size=2.0)
+
+
+
+
+        min_distance, min_traj_pos, theta = controller.compute_min_distance_to_trajectory(drone_pos)
+        
+        # Zeichne den Punkt auf der Trajektorie, der den minimalen Abstand hat
+        draw_point(env, min_traj_pos, 
+                size=0.01,  # Größe des Punktes
+                rgba=np.array([1.0, 0.5, 0.0, 0.8]))  # Orange
+        
+        # Zeichne eine Linie vom Drohnenpunkt zum nächsten Punkt (orange)
+        draw_line(env, np.vstack([drone_pos, min_traj_pos]),
+                rgba=np.array([1.0, 0.5, 0.0, 1.0]),  # Orange
+                min_size=2.0, max_size=2.0)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         
         # Check if gate positions have changed
         if "gates_pos" in obs:
@@ -65,68 +165,68 @@ class SimVisualizer:
             pass
             
         # Draw both the planned path and the flown path every frame
-        if config.sim.gui:
-            # Draw all previous trajectories with faded colors
-            for i, traj in enumerate(all_trajectories[:-1]):
-                # Light green with decreasing transparency for older trajectories
-                alpha = 0.3 + 0.5 * (i / max(1, len(all_trajectories) - 1))
-                draw_line(env, traj,
-                        rgba=np.array([0.5, 0.8, 0.5, alpha]),  # Light green with alpha
-                        min_size=1.5, max_size=1.5)
-            
-            # Current planned trajectory: strong green, thickness 2
-            if all_trajectories:
-                draw_line(env, all_trajectories[-1],
-                        rgba=np.array([0.0, 1.0, 0.0, 1.0]),  # Strong green
-                        min_size=2.0, max_size=2.0)
 
-            # Visualize the planning horizon: cyan/light blue, thicker line
-            if prediction_horizon_points is not None and len(prediction_horizon_points) >= 2:
-                draw_line(env, prediction_horizon_points,
-                        rgba=np.array([0.0, 0.8, 1.0, 1.0]),  # Cyan/light blue
-                        min_size=2.5, max_size=2.5)  # Slightly thicker than the path
+        #Draw all previous trajectories with faded colors
+        for i, traj in enumerate(all_trajectories[:-1]):
+            # Light green with decreasing transparency for older trajectories
+            alpha = 0.3 + 0.5 * (i / max(1, len(all_trajectories) - 1))
+            draw_line(env, traj,
+                    rgba=np.array([0.5, 0.8, 0.5, alpha]),  # Light green with alpha
+                    min_size=1.5, max_size=1.5)
+        
+        # Current planned trajectory: strong green, thickness 2
+        if all_trajectories:
+            draw_line(env, all_trajectories[-1],
+                    rgba=np.array([0.0, 1.0, 0.0, 1.0]),  # Strong green
+                    min_size=2.0, max_size=2.0)
 
-            # Actual flown path: red, thickness 1.5
-            if len(flown_positions) >= 2:
-                fp = np.vstack(flown_positions)
-                draw_line(env, fp,
-                        rgba=np.array([1.0, 0.0, 0.0, 1.0]),
-                        min_size=1.5, max_size=1.5)
-                        
-            # Draw gate update points as light blue spheres
-            for update_point in gate_update_points:
-                draw_point(env, update_point, 
-                        size=0.03,  # Larger sphere for better visibility
-                        rgba=np.array([0.0, 0.7, 1.0, 1.0]))  # Light blue
+        # Visualize the planning horizon: cyan/light blue, thicker line
+        if prediction_horizon_points is not None and len(prediction_horizon_points) >= 2:
+            draw_line(env, prediction_horizon_points,
+                    rgba=np.array([0.0, 0.8, 1.0, 1.0]),  # Cyan/light blue
+                    min_size=2.5, max_size=2.5)  # Slightly thicker than the path
+
+        # Actual flown path: red, thickness 1.5
+        if len(flown_positions) >= 2:
+            fp = np.vstack(flown_positions)
+            draw_line(env, fp,
+                    rgba=np.array([1.0, 0.0, 0.0, 1.0]),
+                    min_size=1.5, max_size=1.5)
+                    
+        # Draw gate update points as light blue spheres
+        for update_point in gate_update_points:
+            draw_point(env, update_point, 
+                    size=0.03,  # Larger sphere for better visibility
+                    rgba=np.array([0.0, 0.7, 1.0, 1.0]))  # Light blue
+        
+        # Draw obstacle update points as skin-colored spheres
+        for update_point in obstacle_update_points:
+            draw_point(env, update_point, 
+                    size=0.03,  # Larger sphere for better visibility
+                    rgba=np.array([0.94, 0.78, 0.67, 1.0]))  # Skin color
+        
+        # Draw gates with position and orientation
+        if "gates_pos" in obs and "gates_quat" in obs:
+            # Draw all gates with their current positions and orientations
+            draw_gates(env, 
+                    gates_pos=np.array(obs["gates_pos"]), 
+                    gates_quat=np.array(obs["gates_quat"]),
+                    half_extents=np.array([0.2, 0.015, 0.2]),  # inner opening 0.2 x 0.2, with 0.015 depth of the gate
+                    frame_thickness=0.09,  # Beam width in meters
+                    rgba_opening=np.array([0.0, 0.7, 1.0, 0.0]),  # Completely transparent (Alpha=0)
+                    rgba_frame=np.array([0.0, 0.7, 1.0, 0.5]))   # Light blue
+        
+        # Draw obstacles
+        if "obstacles_pos" in obs:
+            # Draw all obstacles as semi-transparent skin-colored cuboids
+            draw_obstacles(env, 
+                        obstacles_pos=np.array(obs["obstacles_pos"]),
+                        width=0.1,        # Width (x-axis)
+                        depth=0.1,        # Depth (y-axis)
+                        height=2.0,       # Height of the obstacle (z-axis)
+                        position_top=True, # Position is top center
+                        rgba=np.array([0.94, 0.78, 0.67, 0.5]))  # Semi-transparent skin color
             
-            # Draw obstacle update points as skin-colored spheres
-            for update_point in obstacle_update_points:
-                draw_point(env, update_point, 
-                        size=0.03,  # Larger sphere for better visibility
-                        rgba=np.array([0.94, 0.78, 0.67, 1.0]))  # Skin color
-            
-            # Draw gates with position and orientation
-            if "gates_pos" in obs and "gates_quat" in obs:
-                # Draw all gates with their current positions and orientations
-                draw_gates(env, 
-                        gates_pos=np.array(obs["gates_pos"]), 
-                        gates_quat=np.array(obs["gates_quat"]),
-                        half_extents=np.array([0.2, 0.015, 0.2]),  # inner opening 0.2 x 0.2, with 0.015 depth of the gate
-                        frame_thickness=0.09,  # Beam width in meters
-                        rgba_opening=np.array([0.0, 0.7, 1.0, 0.0]),  # Completely transparent (Alpha=0)
-                        rgba_frame=np.array([0.0, 0.7, 1.0, 0.5]))   # Light blue
-            
-            # Draw obstacles
-            if "obstacles_pos" in obs:
-                # Draw all obstacles as semi-transparent skin-colored cuboids
-                draw_obstacles(env, 
-                            obstacles_pos=np.array(obs["obstacles_pos"]),
-                            width=0.1,        # Width (x-axis)
-                            depth=0.1,        # Depth (y-axis)
-                            height=2.0,       # Height of the obstacle (z-axis)
-                            position_top=True, # Position is top center
-                            rgba=np.array([0.94, 0.78, 0.67, 0.5]))  # Semi-transparent skin color
-                
 
             # # Draw constraint visualization (tube) only around the relevant part of trajectory
             # # This visualization shows safety boundaries around the prediction horizon
