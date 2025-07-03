@@ -46,11 +46,10 @@ class MPController(Controller):
             [-0.2, 1.4, 0.56],
             [-0.9, 1.3, 0.8], 
             [-0.5, 0, 1.11],     # gate4
-	    [-0.1, -1, 1.6]
-	    # old final point of max below, potential issue for shortcut
+	        [-0.1, -1, 1.11]
+	        # old final point of max below, potential issue for shortcut
             #[-0.6, -2, 1.11] # point after gate for clean trajectory to finish 
             ### LEARNING: Last poun needs to be really far out for a smooth trajectory though the gate (at least with our current trajectory calculation)
-
         ])
 
 
@@ -71,8 +70,8 @@ class MPController(Controller):
         ### LEARNING: Weights that are higher than 60 can cause huge issues, 
         # if the drone is not able to get the curve (i.e. reversing back, crashing into the gate, 
         # or deliberately missting the gate to avoid a high off-center penalty)
-        self.gate_peak_weights = [35, 50, 60, 5, 50]
-	# # Niclas' gate peak weights
+        self.gate_peak_weights = [35, 50, 60, 50]
+	    # # Niclas' gate peak weights
         #self.gate_peak_weights = [40, 80, 60, 140] 
 
 

@@ -55,7 +55,7 @@ def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosO
     q_l = 60 # lag error weight
     #mu = 0.0008 # progress weight
     ### LEARNING: Progress weight can be really hign and sometimes makes the controller more reliable => 0.6 also worked
-    mu = 0.0015  # progress 0.0015 
+    mu = 0.002  # progress 0.0015 
     q_min = p[6]  # gaussian weight
     max_v_theta = 0.16  # maximum progress velocity
     dv_theta_max = 0.35  # maximum progress acceleration
@@ -80,8 +80,9 @@ def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosO
     control_cost = q_u_vec[0] * u[0]**2 + q_u_vec[1] * u[1]**2 + q_u_vec[2] * u[2]**2 + q_u_vec[3] * u[3]**2 + q_u_vec[4] * (u[4]**2)
 
     # Set cost funnction
-    ocp.model.cost_expr_ext_cost    = q_c * e_c**2 + q_l * e_l**2   - mu * x[15]   + q_min * min_distance**2   + control_cost     #+ hover_error**2 + hover_error_cmd**2 
-    ocp.model.cost_expr_ext_cost_e  = q_c * e_c**2 + q_l * e_l**2   - mu * x[15]   + q_min * min_distance**2
+    ### LEARNING: Progress v_theta quadratic brings huge stabilisation
+    ocp.model.cost_expr_ext_cost    = q_c * e_c**2 + q_l * e_l**2   - mu * x[15]**2   + q_min * min_distance**2   + control_cost     #+ hover_error**2 + hover_error_cmd**2 
+    ocp.model.cost_expr_ext_cost_e  = q_c * e_c**2 + q_l * e_l**2   - mu * x[15]**2   + q_min * min_distance**2
 	
     ### OPTION: with quadratic cost from v5 Branch
     # ocp.model.cost_expr_ext_cost    = q_c * e_c**2 + q_l * e_l**2   - mu * x[15]**2   + q_min * min_distance**2   + control_cost     #+ hover_error**2 + hover_error_cmd**2 
@@ -96,7 +97,7 @@ def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosO
     ocp.constraints.x0 = np.zeros(nx)
     ocp.parameter_values = np.zeros(np_)
 
-### Option: also limit state 14 between 0 and 1 but that should not be needed (from v5 branch)
+    ### Option: also limit state 14 between 0 and 1 but that should not be needed (from v5 branch)
 
     ocp.constraints.lbx = np.array([0.1, 0.1, -1, -0.9, -1.57, -max_v_theta])
     ocp.constraints.ubx = np.array([0.55, 0.55, 1, 0.9, 1.57, max_v_theta])
