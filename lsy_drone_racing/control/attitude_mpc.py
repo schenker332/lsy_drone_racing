@@ -47,17 +47,10 @@ class MPController(Controller):
             [-0.9, 1.3, 0.8], 
             [-0.5, -0.1, 1.11],     # gate4
             [-0.1, -1, 1.6]
-
-
-
-
-
         ])
 
 
 
-        
-        
         ts = np.linspace(0, 1, np.shape(waypoints)[0])
         self.cs_x = CubicSpline(ts, waypoints[:, 0])
         self.cs_y = CubicSpline(ts, waypoints[:, 1])
@@ -65,8 +58,8 @@ class MPController(Controller):
 
 
         self.theta = 0
-        self.v_theta = 1/ (5 * self.dt * self.freq) 
-        #self.v_theta = 0.0  # Initial velocity of theta, adjust as needed
+        self.v_theta = 1/ (7 * self.dt * self.freq) 
+
         gate_indices = [3, 6, 9, 12]
         self.gate_thetas = [ts[i] for i in gate_indices]
         self.gate_peak_weights = [40, 80, 60, 140] 
@@ -88,7 +81,14 @@ class MPController(Controller):
         self._path_log = []
 
 
-
+        self._last_gates_visited = None  # Initialize gate tracking
+        
+        self.gate_to_waypoint_mapping = {
+            0: 3,   # Gate 0 -> Waypoint 3
+            1: 6,   # Gate 1 -> Waypoint 6  
+            2: 9,   # Gate 2 -> Waypoint 9
+            3: 12   # Gate 3 -> Waypoint 12
+        }
 
     def compute_control(
         self, obs: dict[str, NDArray[np.floating]], info: dict | None = None
@@ -106,9 +106,6 @@ class MPController(Controller):
         if self.theta >= 1.2:
             self.finished = True
             
-
-
-
         # Construct the current state vector for the MPC solver
         xcurrent = np.concatenate((obs["pos"], obs["vel"],  R.from_quat(obs["quat"]).as_euler("xyz", degrees=False), [self.last_f_collective, self.last_f_cmd], self.last_rpy_cmd, [ self.theta, self.v_theta]) )
         self.acados_ocp_solver.set(0, "lbx", xcurrent)
@@ -116,7 +113,70 @@ class MPController(Controller):
 
 
 
+        gates_pos = obs.get("gates_pos", None)
+        gates_rpy = obs.get("gates_quat", None) 
+        gates_visited = obs.get("gates_visited", None)
+        
+        # Gate change detection - show only the changed gate
+        if self._last_gates_visited is not None:
+            if not np.array_equal(gates_visited, self._last_gates_visited):
+                # Find which specific gate changed
+                for i, (old, new) in enumerate(zip(self._last_gates_visited, gates_visited)):
+                    if old != new:
+                        print("=" * 20)
+                        print(f"Gate {i} changed: {old} -> {new}")
+                        
+                        # Show position and quaternion only for this changed gate
+                        if gates_pos is not None and i < len(gates_pos):
+                            print(f"Gate {i} position: {gates_pos[i]}")
+                        
+                        if gates_rpy is not None and i < len(gates_rpy):
+                            print(f"Gate {i} quaternion: {gates_rpy[i]}")
+
+        # Store for next comparison
+
+
+
+        # Gate change detection - show only the changed gate
+        if self._last_gates_visited is not None:
+            if not np.array_equal(gates_visited, self._last_gates_visited):
+                # Find which specific gate changed
+                for i, (old, new) in enumerate(zip(self._last_gates_visited, gates_visited)):
+                    if old != new:
+                        print("=" * 20)
+                        print(f"Gate {i} changed: {old} -> {new}")
+                        
+                        # Show position and quaternion only for this changed gate
+                        if gates_pos is not None and i < len(gates_pos):
+                            print(f"Gate {i} position: {gates_pos[i]}")
+                            
+                            # Replace the waypoint with actual gate position
+                            if i in self.gate_to_waypoint_mapping:
+                                waypoint_idx = self.gate_to_waypoint_mapping[i]
+                                old_waypoint = self.waypoints[waypoint_idx].copy()
+                                self.waypoints[waypoint_idx] = gates_pos[i]
+                                print(f"Updated waypoint {waypoint_idx}: {old_waypoint} -> {gates_pos[i]}")
+                                
+                                # Recreate splines with updated waypoints
+                                ts = np.linspace(0, 1, np.shape(self.waypoints)[0])
+                                self.cs_x = CubicSpline(ts, self.waypoints[:, 0])
+                                self.cs_y = CubicSpline(ts, self.waypoints[:, 1])
+                                self.cs_z = CubicSpline(ts, self.waypoints[:, 2])
+                        
+                        if gates_rpy is not None and i < len(gates_rpy):
+                            print(f"Gate {i} quaternion: {gates_rpy[i]}")
+
+        # Store for next comparison
+        self._last_gates_visited = gates_visited.copy() if gates_visited is not None else None
+
+
+
+
+
         min_dist,_,min_theta = self.compute_min_distance_to_trajectory(obs["pos"])
+
+
+
 
 
 

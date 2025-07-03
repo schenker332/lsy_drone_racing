@@ -112,8 +112,3 @@ fn = "uniform"
 minval = [0.0, 0.0, -0.1]
 maxval = [0.0, 0.0, 0.1]
 
-[env.randomizations.obstacle_pos]
-fn = "uniform"
-[env.randomizations.obstacle_pos.kwargs]
-minval = [-0.15, -0.15, -0.05]
-maxval = [0.15, 0.15, 0.05]

@@ -19,6 +19,7 @@ def export_quadrotor_ode_model():
     params_roll_rate = [-3.960889336015948, 4.078293254657104]
     params_yaw_rate = [-0.005347588299390372, 0.0]
     params_acc = [20.907574256269616, 3.653687545690674]
+
     
     # state
     px = SX.sym("px") #0

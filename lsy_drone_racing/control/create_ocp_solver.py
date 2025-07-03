@@ -63,10 +63,9 @@ def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosO
 
 
     # Inputs
+    
     q_u_vec = DM([0.06, 0.055, 0.055, 0.055, 0.05 ])  # Gewichtung für df_cmd, dr_cmd, dp_cmd, dy_cmd, dv_theta_cmd
-    weighted_squares = q_u_vec * (u**2)
-    #control_cost = sum1(weighted_squares)
-
+   
     control_cost = u[0]**2 * q_u_vec[0] + u[1]**2 * q_u_vec[1] + u[2]**2 * q_u_vec[2] + u[3]**2 * q_u_vec[3] + u[4]**2 * q_u_vec[4]
 
     # Set cost funnction
@@ -81,7 +80,9 @@ def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosO
     ocp.parameter_values = np.zeros(np_)
 
     ocp.constraints.lbx = np.array([0.1, 0.1, -1.57, -1.57, -1.57,0,0 ])
-    ocp.constraints.ubx = np.array([0.55, 0.55, 1.57, 1.57, 1.57,1,0.25])
+    ocp.constraints.ubx = np.array([0.55, 0.55, 1.57, 1.57, 1.57,1,0.24])
+
+    
     ocp.constraints.idxbx = np.array([9, 10, 11, 12, 13,14,15])
 
 
@@ -100,7 +101,7 @@ def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosO
     ocp.solver_options.nlp_solver_max_iter = 50 
     # ocp.solver_options.tol = 1e-3    
     # ocp.solver_options.nlp_solver_ext_qp_res = 1
-    # ocp.solver_options.regularize_method  = "CONVEXIFY"
+    #ocp.solver_options.regularize_method  = "CONVEXIFY"
     # ocp.solver_options.globalization_line_search_use_sufficient_descent = 1
 
     solver = AcadosOcpSolver(ocp, json_file=ocp.json_file, verbose=verbose)
