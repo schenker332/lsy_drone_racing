@@ -11,6 +11,7 @@ import toml
 from ml_collections import ConfigDict
 from scipy.spatial.transform import Rotation as R
 from lsy_drone_racing.control.controller import Controller
+from typing import List 
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -19,6 +20,8 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
     from lsy_drone_racing.envs.race_core import RaceCoreEnv
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -195,10 +198,16 @@ def _rotation_matrix_from_points(p1: NDArray, p2: NDArray) -> R:
 
 def _quat_to_mat(q: NDArray) -> NDArray:
     """
-    Wandelt einen Quaternion (x, y, z, w) in eine 3 × 3-Rotationsmatrix um.
+    Converts a quaternion (x, y, z, w) into a 3 × 3 rotation matrix.
+    
+    Args:
+        q: Quaternion as np.ndarray with shape (4,) in format (x, y, z, w)
+        
+    Returns:
+        3x3 rotation matrix as np.ndarray
     """
     x, y, z, w = q
-    # sicherheitshalber normalisieren
+    # normalize as a safety measure
     n = np.linalg.norm(q)
     if n == 0:
         return np.eye(3)
@@ -217,37 +226,37 @@ def draw_gates(
     env: "RaceCoreEnv",
     gates_pos: NDArray,  # (N,3)
     gates_quat: NDArray,  # (N,4)  (x,y,z,w)
-    half_extents: NDArray | None = None,  # Loch-Halb­achsen  (x/2 , y/2 , z/2)
-    frame_thickness: float = None,  # Balken­breite in Metern
-    rgba_opening: NDArray | None = None,  # Farbe des Lochs
-    rgba_frame: NDArray | None = None,  # Farbe der Balken
+    half_extents: NDArray | None = None,  # Opening half-axes  (x/2 , y/2 , z/2)
+    frame_thickness: float = None,  # Frame thickness in meters
+    rgba_opening: NDArray | None = None,  # Color of the opening
+    rgba_frame: NDArray | None = None,  # Color of the frame
 ) -> None:
     """
-    Zeichnet Gate-Öffnung **und** rote Umrandungsbalken.
+    Draws gate openings **and** colored frame beams.
     """
     # ------------------- Defaults ------------------------------------------------
     if half_extents is None:
-        half_extents = np.array([0.225, 0.05, 0.225], dtype=np.float32)  # 0.45×0.45 Loch
+        half_extents = np.array([0.225, 0.05, 0.225], dtype=np.float32)  # 0.45×0.45 opening
     if rgba_opening is None:
         rgba_opening = np.array([0.0, 0.4, 1.0, 0.0], dtype=np.float32)  # semi-transparent
     if rgba_frame is None:
-        rgba_frame = np.array([1.0, 0.0, 0.0, 0.9], dtype=np.float32)  # deckend-rot
+        rgba_frame = np.array([1.0, 0.0, 0.0, 0.9], dtype=np.float32)  # opaque red
 
     sim = env.unwrapped.sim
     if sim.viewer is None:  # Headless
         return
     viewer = sim.viewer.viewer
 
-    # ------------- Geometrie-Parameter ------------------------------------------
-    w, d, h = half_extents * 2  # volle Öffnungs­breite/-tiefe/-höhe
-    t = frame_thickness  # Balken­stärke (voll)
-    d_half = half_extents[1]  # halbe Tiefe Y
+    # ------------- Geometry parameters ------------------------------------------
+    w, d, h = half_extents * 2  # full opening width/depth/height
+    t = frame_thickness  # beam thickness (full)
+    d_half = half_extents[1]  # half depth Y
 
-    # Halbe Kanten­längen der vier Balken
+    # Half edge lengths of the four beams
     size_vert = np.array([t / 2, d_half, (h + 2 * t) / 2], dtype=np.float32)
     size_horiz = np.array([(w + 2 * t) / 2, d_half, t / 2], dtype=np.float32)
 
-    # Lokale Offsets der Balken­zentren
+    # Local offsets of the beam centers
     offs_left = np.array([-(w / 2 + t / 2), 0.0, 0.0], dtype=np.float32)
     offs_right = -offs_left
     offs_bottom = np.array([0.0, 0.0, -(h / 2 + t / 2)], dtype=np.float32)
@@ -263,7 +272,7 @@ def draw_gates(
     for pos, q in zip(gates_pos, gates_quat):
         R = _quat_to_mat(q)
 
-        # 1) Öffnung
+        # 1) Opening
         viewer.add_marker(
             type=mujoco.mjtGeom.mjGEOM_BOX,
             size=half_extents,
@@ -272,7 +281,7 @@ def draw_gates(
             rgba=rgba_opening,
         )
 
-        # 2) Vier Rahmen­balken
+        # 2) Four frame beams
         for off_local, size in offsets:
             off_world = R @ off_local
             viewer.add_marker(
@@ -287,10 +296,10 @@ def draw_gates(
 def draw_obstacles(
     env: Any,  # RaceCoreEnv
     obstacles_pos: NDArray,
-    width: float = 0.3,       # Breite des Hindernisses (x-Achse)
-    depth: float = 0.3,       # Tiefe des Hindernisses (y-Achse)
-    height: float = 0.3,      # Höhe des Hindernisses (z-Achse)
-    position_top: bool = True, # Wenn True: Position ist oben mittig; sonst zentrum
+    width: float = 0.3,       # Width of the obstacle (x-axis)
+    depth: float = 0.3,       # Depth of the obstacle (y-axis)
+    height: float = 0.3,      # Height of the obstacle (z-axis)
+    position_top: bool = True, # If True: Position is top center; otherwise center
     rgba: NDArray | None = None,
 ):
     """Draw obstacles as boxes at their positions.
@@ -313,54 +322,51 @@ def draw_obstacles(
     if rgba is None:
         rgba = np.array([1.0, 0.0, 0.0, 0.7], dtype=np.float32)  # semi-transparent red
 
-    # Halbe Größe, da MuJoCo die Halbachsen des Quaders erwartet
+    # Half size, since MuJoCo expects half-axes of the box
     half_width = width / 2.0
     half_depth = depth / 2.0
     half_height = height / 2.0
     
-    # Erstelle die Größenvektoren für den Quader
+    # Create the size vectors for the box
     half_size = np.array([half_width, half_depth, half_height], dtype=np.float32)
     
-    # Identitätsmatrix für die Rotation (keine Drehung)
+    # Identity matrix for rotation (no rotation)
     mat = np.eye(3, dtype=np.float32).reshape(-1)
 
     for pos in obstacles_pos:
-        # Bestimme die tatsächliche Position des Quaderzentrums
+        # Determine the actual position of the box center
         draw_pos = pos.copy()
         
         if position_top:
-            # Wenn position_top=True: Verschiebe das Zentrum nach unten um die halbe Höhe
-            # Dadurch ist die übergebene Position oben mittig
+            # If position_top=True: Move the center downward by half the height
+            # This makes the provided position the top center
             draw_pos[2] -= half_height
         
         viewer.add_marker(
             type=mujoco.mjtGeom.mjGEOM_BOX, 
-            size=half_size,  # Halbachsen des Quaders
-            pos=draw_pos,    # Position angepasst für position_top
+            size=half_size,  # Half-axes of the box
+            pos=draw_pos,    # Position adjusted for position_top
             mat=mat, 
             rgba=rgba
         )
 
 
 
-...
-
-...
-from typing import List  # am Anfang ergänzen
-
 
 def generate_parallel_lines(trajectory: np.ndarray, radius: float = 0.3, num_lines: int = 16) -> List[np.ndarray]:
     """
     Generate short parallel line segments arranged in a circle around the trajectory.
     Each segment is oriented along the trajectory and offset in a radial direction.
+    This is used to visualize constraints or boundaries around a path.
     
     Args:
-        trajectory: np.ndarray of shape (N, 3), the main trajectory.
-        radius: Distance from center line to each line segment.
-        num_lines: Number of parallel lines per trajectory point.
+        trajectory: np.ndarray of shape (N, 3), the main trajectory points in 3D space.
+        radius: Distance from center line to each line segment (in meters).
+        num_lines: Number of parallel lines per trajectory point, evenly distributed in a circle.
 
     Returns:
-        List of np.ndarray of shape (2, 3), representing start and end of each line.
+        List of np.ndarray of shape (2, 3), representing start and end of each line segment.
+        Each line is a small segment oriented along the trajectory direction.
     """
     if len(trajectory) < 2:
         return []
@@ -394,12 +400,14 @@ def generate_parallel_lines(trajectory: np.ndarray, radius: float = 0.3, num_lin
 def draw_tube_lines(env: Any, trajectory: np.ndarray, radius: float = 0.3, num_lines: int = 16):
     """
     Draws a set of parallel lines around a given trajectory segment to create a tube-like appearance.
+    This can be used to visualize constraints or safe flight corridors around a trajectory.
     
     Args:
-        env: Simulation environment.
-        trajectory: The main trajectory (e.g., prediction horizon).
-        radius: Radius of the virtual tube.
-        num_lines: Number of parallel lines to draw per point.
+        env: Simulation environment with rendering capabilities.
+        trajectory: The main trajectory (e.g., prediction horizon) as np.ndarray of shape (N, 3).
+        radius: Radius of the virtual tube in meters.
+        num_lines: Number of parallel lines to draw per point, evenly distributed around the circle.
+            Higher values give a more continuous tube appearance but use more rendering resources.
     """
     lines = generate_parallel_lines(trajectory, radius=radius, num_lines=num_lines)
     for line in lines:

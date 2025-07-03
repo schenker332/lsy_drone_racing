@@ -1,7 +1,20 @@
+"""Helper module for printing simulation information.
+
+This module contains utilities to format and print simulation data
+for debugging and monitoring purposes.
+"""
+
 import numpy as np
 
 def print_output(obs:dict, tick , freq):
-    if tick % int(freq * 0.5) == 0:  # Alle 0.5 Sekunden
+    """Print current observation data for debugging purposes.
+    
+    Args:
+        obs: Dictionary containing the current observation data
+        tick: Current simulation tick counter
+        freq: Simulation frequency in Hz
+    """
+    if tick % int(freq * 0.5) == 0:  # Every 0.5 seconds
         print("\n===== SENSOR INPUT (obs) =====")
         pos = obs.get("pos", None)
         quat = obs.get("quat", None)
