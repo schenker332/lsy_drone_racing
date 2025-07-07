@@ -63,16 +63,14 @@ class MPController(Controller):
 
 
         self.theta = 0
-        self.v_theta = 1/ (5 * self.dt * self.freq) 
-        #self.v_theta = 0.0  # Initial velocity of theta, adjust as needed
+        self.v_theta = 1/ (5 * self.dt * self.freq) ## from niclas with 6 or 7
         gate_indices = [3, 6, 9, 12]
         self.gate_thetas = [ts[i] for i in gate_indices]
         ### LEARNING: Weights that are higher than 60 can cause huge issues, 
         # if the drone is not able to get the curve (i.e. reversing back, crashing into the gate, 
         # or deliberately missting the gate to avoid a high off-center penalty)
-        self.gate_peak_weights = [35, 50, 60, 50]
-	    # # Niclas' gate peak weights
-        #self.gate_peak_weights = [40, 80, 60, 140] 
+        self.gate_peak_weights = [35, 50, 60, 50] # [40, 80, 60, 140]. //// [140, 140, 140, 140] 
+	
 
 
         # Create the optimal control problem solver
@@ -109,9 +107,6 @@ class MPController(Controller):
         if self.theta >= 1.2:
             self.finished = True
             
-
-
-
         # Construct the current state vector for the MPC solver
         xcurrent = np.concatenate((obs["pos"], obs["vel"],  R.from_quat(obs["quat"]).as_euler("xyz", degrees=False), [self.last_f_collective, self.last_f_cmd], self.last_rpy_cmd, [ self.theta, self.v_theta]) )
         self.acados_ocp_solver.set(0, "lbx", xcurrent)
@@ -119,11 +114,12 @@ class MPController(Controller):
 
 
 
-        min_dist,_,min_theta = self.compute_min_distance_to_trajectory(obs["pos"])
+        ### ======================================= ###
+        ### ============ Set parameters =========== ###
+        ### ======================================= ###
 
+        _,_,min_theta = self.compute_min_distance_to_trajectory(obs["pos"])
 
-
-        # Prepare reference trajectory and weights for all steps in the horizon
         for j in range(self.N + 1):
             theta_j = min(self.theta + j * self.v_theta * self.dt, 1.0)
             theta_j_next = min(theta_j + 0.0001, 1.0)
@@ -139,20 +135,24 @@ class MPController(Controller):
             self.acados_ocp_solver.set(j, "p", p_ref)
 
 
-        # Solve the MPC problem
+        ### ======================================= ###
+        ### ============ Solve the OCP ============ ###
+        ### ======================================= ###
         self.acados_ocp_solver.solve()
         x1 = self.acados_ocp_solver.get(1, "x")
-        u1 = self.acados_ocp_solver.get(1, "u")
-        ### Debugging block for flying commands
 
+
+        ### ======================================= ###
+        ### ============ Debugging ================ ###
+        ### ======================================= ###
+        #u1 = self.acados_ocp_solver.get(1, "u")
         # Debugging of  feedback law i.e print u1
         # # print u1
         # input_names = ["df_cmd", "dr_cmd", "dp_cmd", "dy_cmd", "dv_theta_cmd"]
         # for name, value in zip(input_names, u1):
         #     print(f"{name}: {value:.19f}")
 
-       
-	## Debugging prinzs for state variables
+	    ## Debugging prints for state variables
         # # print_output(tick=self._tick, obs=obs, freq=self.config.env.freq)
         # state_names = ["px", "py", "pz", "vx", "vy", "vz", "roll", "pitch", "yaw",
         #                "f_collective", "f_collective_cmd", "r_cmd", "p_cmd", "y_cmd",
@@ -169,6 +169,9 @@ class MPController(Controller):
         # print("=" * 20)
 
 
+        ### ======================================= ###
+        ### ============ Update state ============= ###
+        ### ======================================= ###
         w = 1 / self.config.env.freq / self.dt
         self.last_f_collective = self.last_f_collective * (1 - w) + x1[9] * w
         self.last_f_cmd = x1[10]
@@ -177,9 +180,6 @@ class MPController(Controller):
         self.v_theta = x1[15] 
         self.theta = min(1.0, self.theta + self.v_theta * self.dt)
         #self.theta = x1[14]  # Experimental Update theta directly from the MPC solution
-
-  
-  
 
         cmd = x1[10:14]
         
