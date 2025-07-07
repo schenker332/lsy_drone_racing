@@ -69,7 +69,7 @@ class MPController(Controller):
         ### LEARNING: Weights that are higher than 60 can cause huge issues, 
         # if the drone is not able to get the curve (i.e. reversing back, crashing into the gate, 
         # or deliberately missting the gate to avoid a high off-center penalty)
-        self.gate_peak_weights = [35, 50, 60, 50] # [40, 80, 60, 140]. //// [140, 140, 140, 140] 
+        self.gate_peak_weights = [35, 50, 60, 100] # [40, 80, 60, 140]. //// [140, 140, 140, 140] 
 	
 
 
@@ -87,6 +87,15 @@ class MPController(Controller):
         self._info = info
         self.waypoints = waypoints
         self._path_log = []
+
+        self._last_gates_visited = None  # Initialize gate tracking
+        
+        self.gate_to_waypoint_mapping = {
+            0: 3,   # Gate 0 -> Waypoint 3
+            1: 6,   # Gate 1 -> Waypoint 6  
+            2: 9,   # Gate 2 -> Waypoint 9
+            3: 12   # Gate 3 -> Waypoint 12
+        }
 
 
 
@@ -113,6 +122,60 @@ class MPController(Controller):
         self.acados_ocp_solver.set(0, "ubx", xcurrent)
 
 
+
+
+        gates_pos = obs.get("gates_pos", None)
+        gates_rpy = obs.get("gates_quat", None) 
+        gates_visited = obs.get("gates_visited", None)
+        
+        # # Gate change detection - show only the changed gate
+        # if self._last_gates_visited is not None:
+        #     if not np.array_equal(gates_visited, self._last_gates_visited):
+        #         # Find which specific gate changed
+        #         for i, (old, new) in enumerate(zip(self._last_gates_visited, gates_visited)):
+        #             if old != new:
+        #                 print("=" * 20)
+        #                 print(f"Gate {i} changed: {old} -> {new}")
+                        
+        #                 # Show position and quaternion only for this changed gate
+        #                 if gates_pos is not None and i < len(gates_pos):
+        #                     print(f"Gate {i} position: {gates_pos[i]}")
+                        
+        #                 if gates_rpy is not None and i < len(gates_rpy):
+        #                     print(f"Gate {i} quaternion: {gates_rpy[i]}")
+
+
+        # Gate change detection - show only the changed gate
+        if self._last_gates_visited is not None:
+            if not np.array_equal(gates_visited, self._last_gates_visited):
+                # Find which specific gate changed
+                for i, (old, new) in enumerate(zip(self._last_gates_visited, gates_visited)):
+                    if old != new:
+                        # print("=" * 20)
+                        # print(f"Gate {i} changed: {old} -> {new}")
+                        
+                        # Show position and quaternion only for this changed gate
+                        if gates_pos is not None and i < len(gates_pos):
+                            # print(f"Gate {i} position: {gates_pos[i]}")
+                            
+                            # Replace the waypoint with actual gate position
+                            if i in self.gate_to_waypoint_mapping:
+                                waypoint_idx = self.gate_to_waypoint_mapping[i]
+                                old_waypoint = self.waypoints[waypoint_idx].copy()
+                                self.waypoints[waypoint_idx] = gates_pos[i]
+                                # print(f"Updated waypoint {waypoint_idx}: {old_waypoint} -> {gates_pos[i]}")
+                                
+                                # Recreate splines with updated waypoints
+                                ts = np.linspace(0, 1, np.shape(self.waypoints)[0])
+                                self.cs_x = CubicSpline(ts, self.waypoints[:, 0])
+                                self.cs_y = CubicSpline(ts, self.waypoints[:, 1])
+                                self.cs_z = CubicSpline(ts, self.waypoints[:, 2])
+                        
+                        # if gates_rpy is not None and i < len(gates_rpy):
+                            # print(f"Gate {i} quaternion: {gates_rpy[i]}")
+
+        # Store for next comparison
+        self._last_gates_visited = gates_visited.copy() if gates_visited is not None else None
 
         ### ======================================= ###
         ### ============ Set parameters =========== ###
