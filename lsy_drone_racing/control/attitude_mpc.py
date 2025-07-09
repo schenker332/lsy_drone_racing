@@ -38,15 +38,16 @@ class MPController(Controller):
             [0.7, 0.1, 0.4],
             [0.45, -0.5, 0.56],  # gate1
             [0.2, -0.7, 0.65],
+            [0.1, -1.0, 0.75],
             [0.5, -1.5, 0.8],
-            [1, -1.05, 1.3],    # gate2 1.1
+            [1, -1.05, 1.1],    # gate2 1.1
             [1.15, -0.75, 1],
             [0.5, 0, 0.8],
             [0, 1, 0.56],        # gate3
             [-0.2, 1.4, 0.56],
             [-0.9, 1.3, 0.8], 
             [-0.5, 0, 1.11],     # gate4
-	        [-0.1, -1, 1.11]
+	        [-0.4, -1, 1.11]
 	        # old final point of max below, potential issue for shortcut
             #[-0.6, -2, 1.11] # point after gate for clean trajectory to finish 
             ### LEARNING: Last poun needs to be really far out for a smooth trajectory though the gate (at least with our current trajectory calculation)
@@ -62,13 +63,13 @@ class MPController(Controller):
 
 
         self.theta = 0
-        self.v_theta = 1/ (5 * self.dt * self.freq) ## from niclas with 6 or 7
-        gate_indices = [3, 6, 9, 12]
+        self.v_theta = 1/ (7 * self.dt * self.freq) ## from niclas with 6 or 7
+        gate_indices = [3, 7, 10, 13]
         self.gate_thetas = [ts[i] for i in gate_indices]
         ### LEARNING: Weights that are higher than 60 can cause huge issues, 
         # if the drone is not able to get the curve (i.e. reversing back, crashing into the gate, 
         # or deliberately missting the gate to avoid a high off-center penalty)
-        self.gate_peak_weights = [100, 80, 60, 100] # [40, 80, 60, 140]. //// [140, 140, 140, 140] 
+        self.gate_peak_weights = [100, 80, 60, 140] # [40, 80, 60, 140]. //// [140, 140, 140, 140] 
 	
 
 
@@ -88,21 +89,34 @@ class MPController(Controller):
         self._path_log = []
 
         self._last_gates_visited = None  # Initialize gate tracking
+        self._last_gates_pos = None      # Store previous gate positions for delta calculation
         
         self.gate_to_waypoint_mapping = {
             0: 3,   # Gate 0 -> Waypoint 3
-            1: 6,   # Gate 1 -> Waypoint 6  
-            2: 9,   # Gate 2 -> Waypoint 9
-            3: 12   # Gate 3 -> Waypoint 12
+            1: 7,   # Gate 1 -> Waypoint 7  
+            2: 10,   # Gate 2 -> Waypoint 10
+            3: 13,   # Gate 3 -> Waypoint 13
+
+        }
+
+        # Mapping Gate -> Liste von (waypoint_idx, factor) Tupeln,
+        # wobei factor bestimmt, wie stark die Δ-Verschiebung angewendet wird
+        # factor = 1.0 bedeutet volle Verschiebung, 0.5 bedeutet halbe Verschiebung, etc.
+        self.relative_waypoint_mapping = {
+            # 3: [(14, 1.0)],  # Gate 3 verschiebt Waypoint 14 mit voller Stärke
+            # 0: [(7, 2)],  # Gate 1 verschiebt WP 6 mit 50% und WP 8 mit 30% der Delta-Verschiebung
+            # Beispiele für weitere Optionen:
+            # 1: [(6, 0.5), (8, 0.3)],  # Gate 1 verschiebt WP 6 mit 50% und WP 8 mit 30% der Delta-Verschiebung
+            # hier beliebig weitere Einträge möglich
         }
 
         # Gate-Offsets für feinere Kontrolle der Flugbahn
         # Format: [dx, dy, dz] in Meter
         self.gate_offsets = {
             0: np.array([0.0, 0.0, 0.0]),    # Kein Offset für Gate 0
-            1: np.array([0.0, 0.0, 0.2]),    # Kein Offset für Gate 1
+            1: np.array([0.0, 0.0, 0.0]),    # Kein Offset für Gate 1
             2: np.array([0.0, 0.0, 0.0]),    # Offset für Gate 2: 20cm rechts, 10cm höher
-            3: np.array([0.0, 0.0, 0.1])   # Offset für Gate 3: 10cm links, 15cm höher
+            3: np.array([0.0, 0.0, 0.0])   # Offset für Gate 3: 10cm links, 15cm höher
         }
 
         # for visualization 
@@ -145,7 +159,7 @@ class MPController(Controller):
         _,_,min_theta = self.compute_min_distance_to_trajectory(obs["pos"])
 
         # update trajectory
-        # self._handle_gate_update(obs)
+        self._handle_gate_update(obs)
         obs_array = obs["obstacles_pos"]          # shape=(4,3)
         obs_flat = obs_array.reshape(-1)
 
@@ -473,39 +487,57 @@ class MPController(Controller):
                 if not np.array_equal(gates_visited, self._last_gates_visited):
                     # Find which specific gate changed
                     for i, (old, new) in enumerate(zip(self._last_gates_visited, gates_visited)):
-                        if old != new:
-                            # Update waypoint if the gate position is available
-                            if gates_pos is not None and i < len(gates_pos) and i in self.gate_to_waypoint_mapping:
+                        if old != new and gates_pos is not None and i < len(gates_pos):
+                            # --- 1) Berechne neue und alte finale Gate-Position inkl. Offset ---
+                            new_gate_pos = gates_pos[i].copy()
+                            old_gate_pos = (self._last_gates_pos[i]
+                                            if self._last_gates_pos is not None
+                                            else new_gate_pos)
+                            
+                            # Offset-Logik für neue Position
+                            if i in self.gate_offsets:
+                                gates_orn = obs.get("gates_orn", None)
+                                if gates_orn is not None and i < len(gates_orn):
+                                    # Anwenden der Rotation auf den Offset
+                                    offset_local = self.gate_offsets[i]
+                                    rot = R.from_quat(gates_orn[i])
+                                    offset_global = rot.apply(offset_local)
+                                    new_gate_pos += offset_global
+                                    # Auch alte Position mit gleichem Offset für korrekte Delta-Berechnung
+                                    old_gate_pos += offset_global
+                                else:
+                                    # Wenn keine Orientierung verfügbar, einfachen Offset anwenden
+                                    new_gate_pos += self.gate_offsets[i]
+                                    old_gate_pos += self.gate_offsets[i]
+                            
+                            # Δ-Verschiebung berechnen
+                            delta = new_gate_pos - old_gate_pos
+                            
+                            # --- 2) Haupt-Waypoint für dieses Gate updaten ---
+                            if i in self.gate_to_waypoint_mapping:
                                 waypoint_idx = self.gate_to_waypoint_mapping[i]
-                                
-                                # Anwenden des Offsets, falls für dieses Gate definiert
-                                gate_pos = gates_pos[i].copy()
-                                if i in self.gate_offsets:
-                                    # Gate-Orientierung für korrekte Offset-Anwendung berücksichtigen
-                                    gates_orn = obs.get("gates_orn", None)
-                                    if gates_orn is not None and i < len(gates_orn):
-                                        # Anwenden der Rotation auf den Offset
-                                        offset_local = self.gate_offsets[i]
-                                        rot = R.from_quat(gates_orn[i])
-                                        offset_global = rot.apply(offset_local)
-                                        gate_pos += offset_global
-                                    else:
-                                        # Wenn keine Orientierung verfügbar, einfachen Offset anwenden
-                                        gate_pos += self.gate_offsets[i]
-                                
-                                self.waypoints[waypoint_idx] = gate_pos
-                                
-                                # Recreate splines with updated waypoints
-                                ts = np.linspace(0, 1, np.shape(self.waypoints)[0])
-                                self.cs_x = CubicSpline(ts, self.waypoints[:, 0])
-                                self.cs_y = CubicSpline(ts, self.waypoints[:, 1])
-                                self.cs_z = CubicSpline(ts, self.waypoints[:, 2])
-                                
-                                # for visualization
-                                vis_s = np.linspace(0.0, 1.0, 700)
-                                new_traj = np.column_stack((self.cs_x(vis_s), self.cs_y(vis_s), self.cs_z(vis_s)))
-                                self._trajectory_history.append(new_traj.copy())
+                                self.waypoints[waypoint_idx] = new_gate_pos
+                            
+                            # --- 3) Alle in relative_waypoint_mapping definierten Waypoints updaten ---
+                            if i in self.relative_waypoint_mapping:
+                                for wp_rel, factor in self.relative_waypoint_mapping[i]:
+                                    # Prüfe Index-Gültigkeit
+                                    if 0 <= wp_rel < len(self.waypoints):
+                                        # Wende die Verschiebung mit dem angegebenen Faktor an
+                                        self.waypoints[wp_rel] += delta * factor
+                            
+                            # --- 4) Splines neu berechnen ---
+                            ts = np.linspace(0, 1, np.shape(self.waypoints)[0])
+                            self.cs_x = CubicSpline(ts, self.waypoints[:, 0])
+                            self.cs_y = CubicSpline(ts, self.waypoints[:, 1])
+                            self.cs_z = CubicSpline(ts, self.waypoints[:, 2])
+                            
+                            # for visualization
+                            vis_s = np.linspace(0.0, 1.0, 700)
+                            new_traj = np.column_stack((self.cs_x(vis_s), self.cs_y(vis_s), self.cs_z(vis_s)))
+                            self._trajectory_history.append(new_traj.copy())
 
             # Store for next comparison
             self._last_gates_visited = gates_visited.copy() if gates_visited is not None else None
+            self._last_gates_pos = gates_pos.copy() if gates_pos is not None else None
 
