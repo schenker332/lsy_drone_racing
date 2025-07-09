@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 from acados_template import AcadosOcp, AcadosOcpSolver
 from lsy_drone_racing.control.export_quadrotor_ode_model import export_quadrotor_ode_model
-from lsy_drone_racing.control.helper.costfunction import contour_and_lag_error, get_min_distance_to_trajectory
+from lsy_drone_racing.control.helper.costfunction import contour_and_lag_error, get_min_distance_to_trajectory, get_exponential_obstacle_cost
 from casadi import DM, sum1
 
 
@@ -44,6 +44,10 @@ def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosO
     e_c, e_l= contour_and_lag_error(ocp.model)
     min_distance = get_min_distance_to_trajectory(ocp.model)  # Get minimum distance to trajectory
 
+    obstacle_cost = get_exponential_obstacle_cost(ocp.model,
+                                  num_obstacles=4,
+                                  weight=90.0,   
+                                  k=0.2)
 
     # Parameters Niclas
     # q_c = 60 # contour error weight
@@ -54,7 +58,7 @@ def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosO
     ### LEARNING: Similar as for gate penalties, too high contouing error can caouse frek instability incidents
     q_c = 70 # contour error weight
     q_l = 60 # lag error weight
-    mu = 0.001         # progress 0.0015      #mu = 0.0008 # progress weight ### LEARNING: Progress weight can be really hign and sometimes makes the controller more reliable => 0.6 also worked
+    mu = 0.00005         # progress 0.0015      #mu = 0.0008 # progress weight ### LEARNING: Progress weight can be really hign and sometimes makes the controller more reliable => 0.6 also worked
     q_min = p[6]  # gaussian weight
     max_v_theta = 0.16  # maximum progress velocity
     dv_theta_max = 0.35  # maximum progress acceleration
@@ -67,8 +71,8 @@ def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosO
 
     # Set cost funnction
     ### LEARNING: Progress v_theta quadratic brings huge stabilisation
-    ocp.model.cost_expr_ext_cost    = q_c * e_c**2 + q_l * e_l**2   - mu * x[15]**2   + q_min * min_distance**2   + control_cost    
-    ocp.model.cost_expr_ext_cost_e  = q_c * e_c**2 + q_l * e_l**2   - mu * x[15]**2   + q_min * min_distance**2
+    ocp.model.cost_expr_ext_cost    = q_c * e_c**2 + q_l * e_l**2   - mu * x[15]**2   + q_min * min_distance**2    + control_cost    
+    ocp.model.cost_expr_ext_cost_e  = q_c * e_c**2 + q_l * e_l**2   - mu * x[15]**2   + q_min * min_distance**2   
 	
     #min_distance**3
     #min_distance**3

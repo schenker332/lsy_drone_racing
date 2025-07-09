@@ -56,10 +56,28 @@ def export_quadrotor_ode_model():
     x_ref_min = SX.sym("x_ref_min") #7
     y_ref_min = SX.sym("y_ref_min") #8
     z_ref_min = SX.sym("z_ref_min") #9
+    x_obstacles_pos1 = SX.sym("x_obstacles_pos1") #10
+    y_obstacles_pos1 = SX.sym("y_obstacles_pos1") #11
+    z_obstacles_pos1 = SX.sym("z_obstacles_pos1") #12
+    x_obstacles_pos2 = SX.sym("x_obstacles_pos2") #13
+    y_obstacles_pos2 = SX.sym("y_obstacles_pos2") #14
+    z_obstacles_pos2 = SX.sym("z_obstacles_pos2") #15
+    x_obstacles_pos3 = SX.sym("x_obstacles_pos3") #16
+    y_obstacles_pos3 = SX.sym("y_obstacles_pos3") #17
+    z_obstacles_pos3 = SX.sym("z_obstacles_pos3") #18
+    x_obstacles_pos4 = SX.sym("x_obstacles_pos4") #19
+    y_obstacles_pos4 = SX.sym("y_obstacles_pos4") #20
+    z_obstacles_pos4 = SX.sym("z_obstacles_pos4") #21
 
-    
+    # Create a vector for the obstacle positions
+    obstacles_pos = vertcat(
+        x_obstacles_pos1, y_obstacles_pos1, z_obstacles_pos1,
+        x_obstacles_pos2, y_obstacles_pos2, z_obstacles_pos2,
+        x_obstacles_pos3, y_obstacles_pos3, z_obstacles_pos3,
+        x_obstacles_pos4, y_obstacles_pos4, z_obstacles_pos4
+    )
 
-    
+
     # State and input vectors
     states = vertcat(
         px, py, pz, # 0 , 1, 2
@@ -76,7 +94,7 @@ def export_quadrotor_ode_model():
     p = vertcat(x_ref, y_ref, z_ref, # 0, 1, 2
                  x_ref_next, y_ref_next, z_ref_next, # 3, 4, 5
                    weight, x_ref_min, y_ref_min, # 6, 7, 8
-                   z_ref_min) # 9
+                   z_ref_min, obstacles_pos) # 9
 
     # System dynamics
     f_expl = vertcat(
