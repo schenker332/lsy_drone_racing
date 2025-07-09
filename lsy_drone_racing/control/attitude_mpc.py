@@ -27,7 +27,7 @@ class MPController(Controller):
         self._tick = 0
 
         # MPC parameters
-        self.N = 50                    # Number of discretization steps
+        self.N = 40                    # Number of discretization steps
         self.T_HORIZON = 1.5           # Time horizon in seconds
         self.dt = self.T_HORIZON / self.N  # Step size
 
@@ -39,7 +39,7 @@ class MPController(Controller):
             [0.45, -0.5, 0.56],  # gate1
             [0.2, -0.7, 0.65],
             [0.5, -1.5, 0.8],
-            [1, -1.05, 1.2],    # gate2
+            [1, -1.05, 1.3],    # gate2 1.1
             [1.15, -0.75, 1],
             [0.5, 0, 0.8],
             [0, 1, 0.56],        # gate3
@@ -53,7 +53,6 @@ class MPController(Controller):
         ])
 
 
-        # was geht ab
         
         
         ts = np.linspace(0, 1, np.shape(waypoints)[0])
@@ -69,7 +68,7 @@ class MPController(Controller):
         ### LEARNING: Weights that are higher than 60 can cause huge issues, 
         # if the drone is not able to get the curve (i.e. reversing back, crashing into the gate, 
         # or deliberately missting the gate to avoid a high off-center penalty)
-        self.gate_peak_weights = [35, 50, 60, 100] # [40, 80, 60, 140]. //// [140, 140, 140, 140] 
+        self.gate_peak_weights = [100, 80, 60, 100] # [40, 80, 60, 140]. //// [140, 140, 140, 140] 
 	
 
 
@@ -95,6 +94,15 @@ class MPController(Controller):
             1: 6,   # Gate 1 -> Waypoint 6  
             2: 9,   # Gate 2 -> Waypoint 9
             3: 12   # Gate 3 -> Waypoint 12
+        }
+
+        # Gate-Offsets für feinere Kontrolle der Flugbahn
+        # Format: [dx, dy, dz] in Meter
+        self.gate_offsets = {
+            0: np.array([0.0, 0.0, 0.0]),    # Kein Offset für Gate 0
+            1: np.array([0.0, 0.0, 0.2]),    # Kein Offset für Gate 1
+            2: np.array([0.0, 0.0, 0.0]),    # Offset für Gate 2: 20cm rechts, 10cm höher
+            3: np.array([0.0, 0.0, 0.1])   # Offset für Gate 3: 10cm links, 15cm höher
         }
 
         # for visualization 
@@ -137,7 +145,12 @@ class MPController(Controller):
         _,_,min_theta = self.compute_min_distance_to_trajectory(obs["pos"])
 
         # update trajectory
-        self._handle_gate_update(obs)
+        # self._handle_gate_update(obs)
+        obs_array = obs["obstacles_pos"]          # shape=(4,3)
+        obs_flat = obs_array.reshape(-1)
+
+
+
 
         for j in range(self.N + 1):
             theta_j = min(self.theta + j * self.v_theta * self.dt, 1.0)
@@ -151,6 +164,7 @@ class MPController(Controller):
             self.get_weight(theta_min_j),   # for gauss weighting
             self.cs_x(theta_min_j), self.cs_y(theta_min_j), self.cs_z(theta_min_j) # for real minimun distance
             ])
+            p_ref = np.concatenate([p_ref, obs_flat])
             self.acados_ocp_solver.set(j, "p", p_ref)
 
 
@@ -164,6 +178,31 @@ class MPController(Controller):
         ### ======================================= ###
         ### ============ Debugging ================ ###
         ### ======================================= ###
+
+        # Bestrafungsparameter
+        weight = 40.0   # Gewicht
+        k      = 5.0   # Steilheit
+
+        # Beispiel: obs_flat aus deinem Controller, shape (12,)
+        # Und obs["pos"] aus deinem Sensor-Input, shape (3,)
+        drone_xy = np.array(obs["pos"][:2])        # [px, py]
+        obs_flat  = obs["obstacles_pos"].reshape(-1)  # (12,)
+
+        # Umformen zu (4,3) und nur x,y behalten → (4,2)
+        obs_xy = obs_flat.reshape(-1, 3)[:, :2]     
+
+        # Loop über alle Hindernisse
+        for i, (ox, oy) in enumerate(obs_xy):
+            # Abstand in der xy-Ebene
+            dx = drone_xy[0] - ox
+            dy = drone_xy[1] - oy
+            d  = np.hypot(dx, dy)                  # = sqrt(dx**2 + dy**2)
+
+            # Exponentielle Kosten
+            cost_i = weight * np.exp(-k * d)
+
+            # print(f"Obs {i}: Position=({ox:6.3f}, {oy:6.3f})  Abstand={d:5.3f} m  Kosten={cost_i:6.3f}")
+        # print_output(tick=self._tick, obs=obs, freq=self.config.env.freq)
 
         #u1 = self.acados_ocp_solver.get(1, "u")
         # Debugging of  feedback law i.e print u1
@@ -348,7 +387,7 @@ class MPController(Controller):
         und an jedem Gate auf bis zu gate_peak_weights[i] ansteigt.
         """
         base_weight = 20
-        sigma       = 0.05
+        sigma       = 0.06
 
         w = base_weight
         # Durchlaufe Gates und zugehörige Spitzengewichte
@@ -438,7 +477,23 @@ class MPController(Controller):
                             # Update waypoint if the gate position is available
                             if gates_pos is not None and i < len(gates_pos) and i in self.gate_to_waypoint_mapping:
                                 waypoint_idx = self.gate_to_waypoint_mapping[i]
-                                self.waypoints[waypoint_idx] = gates_pos[i]
+                                
+                                # Anwenden des Offsets, falls für dieses Gate definiert
+                                gate_pos = gates_pos[i].copy()
+                                if i in self.gate_offsets:
+                                    # Gate-Orientierung für korrekte Offset-Anwendung berücksichtigen
+                                    gates_orn = obs.get("gates_orn", None)
+                                    if gates_orn is not None and i < len(gates_orn):
+                                        # Anwenden der Rotation auf den Offset
+                                        offset_local = self.gate_offsets[i]
+                                        rot = R.from_quat(gates_orn[i])
+                                        offset_global = rot.apply(offset_local)
+                                        gate_pos += offset_global
+                                    else:
+                                        # Wenn keine Orientierung verfügbar, einfachen Offset anwenden
+                                        gate_pos += self.gate_offsets[i]
+                                
+                                self.waypoints[waypoint_idx] = gate_pos
                                 
                                 # Recreate splines with updated waypoints
                                 ts = np.linspace(0, 1, np.shape(self.waypoints)[0])
