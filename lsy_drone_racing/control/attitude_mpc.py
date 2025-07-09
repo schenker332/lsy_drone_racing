@@ -53,7 +53,6 @@ class MPController(Controller):
         ])
 
 
-
         
         
         ts = np.linspace(0, 1, np.shape(waypoints)[0])
