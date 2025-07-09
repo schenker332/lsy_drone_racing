@@ -54,9 +54,9 @@ class SimVisualizer:
         e_l_vis = vis_data['e_l_vis']
                 
 
-        # Draw all trajectories except the last one
-        if trajectories and len(trajectories) > 1:
-            [draw_line(env, traj, rgba=np.array([0.5, 0.8, 0.5, 0.3]), min_size=1.0, max_size=1.0) for traj in trajectories[:-1]]
+        # # Draw all trajectories except the last one
+        # if trajectories and len(trajectories) > 1:
+        #     [draw_line(env, traj, rgba=np.array([0.5, 0.8, 0.5, 0.3]), min_size=1.0, max_size=1.0) for traj in trajectories[:-1]]
         # Draw last trajectory
         if trajectories:
             draw_line(env, trajectories[-1], rgba=np.array([0.0, 1.0, 0.0, 1.0]), min_size=2.5, max_size=2.5)

@@ -36,18 +36,19 @@ class MPController(Controller):
             [1.0, 1.5, 0.2],
             [0.8, 1.0, 0.2],
             [0.7, 0.1, 0.4],
-            [0.45, -0.5, 0.56],  # gate1
-            [0.2, -0.7, 0.65],
+            [0.55, -0.55, 0.56],  # gate1 - 3 0.45  -0.5
+            [0.2, -0.7, 0.65],   # at obstacle 2
             [0.1, -1.0, 0.75],
             [0.5, -1.5, 0.8],
-            [1, -1.05, 1.1],    # gate2 1.1
+            [1, -1.05, 1.25],    # gate2 1.1 -7
             [1.15, -0.75, 1],
             [0.5, 0, 0.8],
-            [0, 1, 0.56],        # gate3
+            [0, 1, 0.66],        # gate3 .56 -10
             [-0.2, 1.4, 0.56],
             [-0.9, 1.3, 0.8], 
-            [-0.5, 0, 1.11],     # gate4
-	        [-0.4, -1, 1.11]
+            [-0.75, 0.5, 1.11],   # at obastacle 4 -13
+            [-0.5, 0, 1.11],     # gate4 -14
+	        [-0.1, -1, 1.11]
 	        # old final point of max below, potential issue for shortcut
             #[-0.6, -2, 1.11] # point after gate for clean trajectory to finish 
             ### LEARNING: Last poun needs to be really far out for a smooth trajectory though the gate (at least with our current trajectory calculation)
@@ -63,13 +64,13 @@ class MPController(Controller):
 
 
         self.theta = 0
-        self.v_theta = 1/ (7 * self.dt * self.freq) ## from niclas with 6 or 7
-        gate_indices = [3, 7, 10, 13]
+        self.v_theta = 1/ (6.5 * self.dt * self.freq) ## from niclas with 6 or 7
+        gate_indices = [3, 7, 10, 14]
         self.gate_thetas = [ts[i] for i in gate_indices]
         ### LEARNING: Weights that are higher than 60 can cause huge issues, 
         # if the drone is not able to get the curve (i.e. reversing back, crashing into the gate, 
         # or deliberately missting the gate to avoid a high off-center penalty)
-        self.gate_peak_weights = [100, 80, 60, 140] # [40, 80, 60, 140]. //// [140, 140, 140, 140] 
+        self.gate_peak_weights = [100, 80, 60, 100] # [40, 80, 60, 140]. //// [140, 140, 140, 140] 
 	
 
 
@@ -95,28 +96,36 @@ class MPController(Controller):
             0: 3,   # Gate 0 -> Waypoint 3
             1: 7,   # Gate 1 -> Waypoint 7  
             2: 10,   # Gate 2 -> Waypoint 10
-            3: 13,   # Gate 3 -> Waypoint 13
+            3: 14,   # Gate 3 -> Waypoint 13
 
         }
 
-        # Mapping Gate -> Liste von (waypoint_idx, factor) Tupeln,
-        # wobei factor bestimmt, wie stark die Δ-Verschiebung angewendet wird
         # factor = 1.0 bedeutet volle Verschiebung, 0.5 bedeutet halbe Verschiebung, etc.
         self.relative_waypoint_mapping = {
             # 3: [(14, 1.0)],  # Gate 3 verschiebt Waypoint 14 mit voller Stärke
-            # 0: [(7, 2)],  # Gate 1 verschiebt WP 6 mit 50% und WP 8 mit 30% der Delta-Verschiebung
-            # Beispiele für weitere Optionen:
-            # 1: [(6, 0.5), (8, 0.3)],  # Gate 1 verschiebt WP 6 mit 50% und WP 8 mit 30% der Delta-Verschiebung
-            # hier beliebig weitere Einträge möglich
         }
+
+
+        self.obstacle_waypoint_mapping = {
+            3: [(13, 1.0, 1.0, 0.0)],     # Obstacle 3 -> WP 14: folgt X&Y komplett, Z bleibt
+            # 0: [(5, 0.5, 1.0, 0.0),       # Obstacle 0 -> WP 5: X zur Hälfte, Y komplett, Z bleibt
+            #     (6, -0.3, 0.0, 0.0)],     # Obstacle 0 -> WP 6: X entgegengesetzt (-0.3m), Y&Z bleiben
+            # 1: [(8, 1.0, 0.0, 0.5)]       # Obstacle 1 -> WP 8: X komplett, Y bleibt, Z zur Hälfte
+            1: [(4, 1.0, 1.0, 0.0)] ,      # Obstacle 1 -> WP 8: X komplett, Y bleibt, Z zur Hälfte
+            1: [(5, 1.0, 1.0, 0.0)],       
+            1: [(6, 1.0, 1.0, 0.0)],
+            1: [(7, 1.2, 1.0, 0.0)],       # Obstacle 1 -> WP 8: X komplett, Y bleibt, Z zur Hälfte
+        }
+        
+        self._last_obstacles_pos = None  # Store previous obstacle positions
 
         # Gate-Offsets für feinere Kontrolle der Flugbahn
         # Format: [dx, dy, dz] in Meter
         self.gate_offsets = {
-            0: np.array([0.0, 0.0, 0.0]),    # Kein Offset für Gate 0
-            1: np.array([0.0, 0.0, 0.0]),    # Kein Offset für Gate 1
+            0: np.array([0.1, -0.05, 0.0]),    # Kein Offset für Gate 0
+            1: np.array([0.0, 0.0, 0.2]),    # Kein Offset für Gate 1
             2: np.array([0.0, 0.0, 0.0]),    # Offset für Gate 2: 20cm rechts, 10cm höher
-            3: np.array([0.0, 0.0, 0.0])   # Offset für Gate 3: 10cm links, 15cm höher
+            3: np.array([0.0, 0.0, 0.1])   # Offset für Gate 3: 10cm links, 15cm höher
         }
 
         # for visualization 
@@ -160,6 +169,7 @@ class MPController(Controller):
 
         # update trajectory
         self._handle_gate_update(obs)
+        self._handle_obstacle_update(obs)  # Neue Zeile für Obstacle-Updates
         obs_array = obs["obstacles_pos"]          # shape=(4,3)
         obs_flat = obs_array.reshape(-1)
 
@@ -338,7 +348,7 @@ class MPController(Controller):
         # Parameter für die Suche
         search_range = 0.1  # Wie weit zurück suchen (in theta-Einheiten)
         coarse_samples = 10  # Anzahl grober Samples für erste Suche
-        fine_samples = 10     # Anzahl feiner Samples für die Verfeinerung
+        fine_samples = 20     # Anzahl feiner Samples für die Verfeinerung
         
         # Definiere den Suchbereich (nur nach hinten)
         search_start = max(0.0, current_theta - search_range)
@@ -401,7 +411,7 @@ class MPController(Controller):
         und an jedem Gate auf bis zu gate_peak_weights[i] ansteigt.
         """
         base_weight = 20
-        sigma       = 0.06
+        sigma       = 0.1
 
         w = base_weight
         # Durchlaufe Gates und zugehörige Spitzengewichte
@@ -540,4 +550,47 @@ class MPController(Controller):
             # Store for next comparison
             self._last_gates_visited = gates_visited.copy() if gates_visited is not None else None
             self._last_gates_pos = gates_pos.copy() if gates_pos is not None else None
+
+    def _handle_obstacle_update(self, obs: dict[str, NDArray[np.floating]]):
+        """Updates waypoints based on obstacle position changes with individual X/Y/Z factors."""
+        obstacles_pos = obs.get("obstacles_pos", None)
+        
+        if obstacles_pos is not None:
+            # Wenn wir vorherige Obstacle-Positionen haben, prüfe auf Änderungen
+            if self._last_obstacles_pos is not None:
+                for i, (old_pos, new_pos) in enumerate(zip(self._last_obstacles_pos, obstacles_pos)):
+                    # Prüfe ob sich die Position geändert hat (mit kleiner Toleranz)
+                    if np.linalg.norm(new_pos - old_pos) > 0.001:  # 1mm Toleranz
+                        # Prüfe ob für dieses Obstacle ein Mapping existiert
+                        if i in self.obstacle_waypoint_mapping:
+                            # Berechne Delta-Verschiebung des Obstacles
+                            delta = new_pos - old_pos
+                            
+                            # Gehe durch alle Waypoints, die von diesem Obstacle beeinflusst werden
+                            for waypoint_idx, x_factor, y_factor, z_factor in self.obstacle_waypoint_mapping[i]:
+                                # Prüfe Index-Gültigkeit
+                                if 0 <= waypoint_idx < len(self.waypoints):
+                                    # Berechne individuelle Verschiebung für jeden Waypoint
+                                    waypoint_delta = np.array([
+                                        delta[0] * x_factor,  # X-Verschiebung mit X-Faktor
+                                        delta[1] * y_factor,  # Y-Verschiebung mit Y-Faktor
+                                        delta[2] * z_factor   # Z-Verschiebung mit Z-Faktor
+                                    ])
+                                    
+                                    # Waypoint aktualisieren
+                                    self.waypoints[waypoint_idx] += waypoint_delta
+                            
+                            # Splines nur einmal pro Obstacle neu berechnen (nach allen Waypoint-Updates)
+                            ts = np.linspace(0, 1, len(self.waypoints))
+                            self.cs_x = CubicSpline(ts, self.waypoints[:, 0])
+                            self.cs_y = CubicSpline(ts, self.waypoints[:, 1])
+                            self.cs_z = CubicSpline(ts, self.waypoints[:, 2])
+                            
+                            # Visualization update
+                            vis_s = np.linspace(0.0, 1.0, 700)
+                            new_traj = np.column_stack((self.cs_x(vis_s), self.cs_y(vis_s), self.cs_z(vis_s)))
+                            self._trajectory_history.append(new_traj.copy())
+            
+            # Aktuelle Positionen für nächsten Vergleich speichern
+            self._last_obstacles_pos = obstacles_pos.copy()
 
