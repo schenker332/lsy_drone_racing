@@ -97,6 +97,13 @@ class MPController(Controller):
             3: 12   # Gate 3 -> Waypoint 12
         }
 
+        # for visualization 
+        vis_s = np.linspace(0.0, 1.0, 700)
+        self._trajectory_history = []  # Store all trajectories for visualization
+        temp = np.column_stack((self.cs_x(vis_s), self.cs_y(vis_s), self.cs_z(vis_s)))
+        self._trajectory_history.append(temp.copy())  
+
+
 
 
 
@@ -123,65 +130,14 @@ class MPController(Controller):
 
 
 
-
-        gates_pos = obs.get("gates_pos", None)
-        gates_rpy = obs.get("gates_quat", None) 
-        gates_visited = obs.get("gates_visited", None)
-        
-        # # Gate change detection - show only the changed gate
-        # if self._last_gates_visited is not None:
-        #     if not np.array_equal(gates_visited, self._last_gates_visited):
-        #         # Find which specific gate changed
-        #         for i, (old, new) in enumerate(zip(self._last_gates_visited, gates_visited)):
-        #             if old != new:
-        #                 print("=" * 20)
-        #                 print(f"Gate {i} changed: {old} -> {new}")
-                        
-        #                 # Show position and quaternion only for this changed gate
-        #                 if gates_pos is not None and i < len(gates_pos):
-        #                     print(f"Gate {i} position: {gates_pos[i]}")
-                        
-        #                 if gates_rpy is not None and i < len(gates_rpy):
-        #                     print(f"Gate {i} quaternion: {gates_rpy[i]}")
-
-
-        # Gate change detection - show only the changed gate
-        if self._last_gates_visited is not None:
-            if not np.array_equal(gates_visited, self._last_gates_visited):
-                # Find which specific gate changed
-                for i, (old, new) in enumerate(zip(self._last_gates_visited, gates_visited)):
-                    if old != new:
-                        # print("=" * 20)
-                        # print(f"Gate {i} changed: {old} -> {new}")
-                        
-                        # Show position and quaternion only for this changed gate
-                        if gates_pos is not None and i < len(gates_pos):
-                            # print(f"Gate {i} position: {gates_pos[i]}")
-                            
-                            # Replace the waypoint with actual gate position
-                            if i in self.gate_to_waypoint_mapping:
-                                waypoint_idx = self.gate_to_waypoint_mapping[i]
-                                old_waypoint = self.waypoints[waypoint_idx].copy()
-                                self.waypoints[waypoint_idx] = gates_pos[i]
-                                # print(f"Updated waypoint {waypoint_idx}: {old_waypoint} -> {gates_pos[i]}")
-                                
-                                # Recreate splines with updated waypoints
-                                ts = np.linspace(0, 1, np.shape(self.waypoints)[0])
-                                self.cs_x = CubicSpline(ts, self.waypoints[:, 0])
-                                self.cs_y = CubicSpline(ts, self.waypoints[:, 1])
-                                self.cs_z = CubicSpline(ts, self.waypoints[:, 2])
-                        
-                        # if gates_rpy is not None and i < len(gates_rpy):
-                            # print(f"Gate {i} quaternion: {gates_rpy[i]}")
-
-        # Store for next comparison
-        self._last_gates_visited = gates_visited.copy() if gates_visited is not None else None
-
         ### ======================================= ###
         ### ============ Set parameters =========== ###
         ### ======================================= ###
 
         _,_,min_theta = self.compute_min_distance_to_trajectory(obs["pos"])
+
+        # update trajectory
+        self._handle_gate_update(obs)
 
         for j in range(self.N + 1):
             theta_j = min(self.theta + j * self.v_theta * self.dt, 1.0)
@@ -208,6 +164,7 @@ class MPController(Controller):
         ### ======================================= ###
         ### ============ Debugging ================ ###
         ### ======================================= ###
+
         #u1 = self.acados_ocp_solver.get(1, "u")
         # Debugging of  feedback law i.e print u1
         # # print u1
@@ -235,6 +192,7 @@ class MPController(Controller):
         ### ======================================= ###
         ### ============ Update state ============= ###
         ### ======================================= ###
+
         w = 1 / self.config.env.freq / self.dt
         self.last_f_collective = self.last_f_collective * (1 - w) + x1[9] * w
         self.last_f_cmd = x1[10]
@@ -290,22 +248,7 @@ class MPController(Controller):
 
 
     def get_trajectory(self) -> NDArray[np.floating]:
-        """Get the smoothed reference trajectory points.
-        
-        Returns:
-            Array of shape (700, 3) containing interpolated trajectory points.
-        """
-        # Recreate spline interpolation of waypoints
-        ts = np.linspace(0, 1, np.shape(self.waypoints)[0])
-        cs_x = CubicSpline(ts, self.waypoints[:, 0])
-        cs_y = CubicSpline(ts, self.waypoints[:, 1])
-        cs_z = CubicSpline(ts, self.waypoints[:, 2])
-        
-        # Generate high-density points for visualization
-        vis_s = np.linspace(0.0, 1.0, 700)
-        traj_points = np.column_stack((cs_x(vis_s), cs_y(vis_s), cs_z(vis_s)))
-
-        return traj_points
+        return self._trajectory_history
         
     def get_prediction_horizon(self) -> NDArray[np.floating]:
         """Get the predicted position trajectory for the planning horizon.
@@ -323,7 +266,6 @@ class MPController(Controller):
             horizon_positions.append(pos)
         
         return np.array(horizon_positions)
-    
 
 
     def compute_min_distance_to_trajectory(self, drone_pos):
@@ -399,7 +341,6 @@ class MPController(Controller):
                 min_theta = theta
         
         return min_dist, min_traj_pos, min_theta
-    
 
     def get_weight(self, theta: float) -> float:
         """
@@ -417,3 +358,99 @@ class MPController(Controller):
             w         = max(w, base_weight + influence)
 
         return w
+    
+    def get_visualization_data(self, drone_pos):
+        """Calculate visualization data for plotting error vectors and reference points.
+        
+        Args:
+            drone_pos: Current drone position as np.array([x, y, z])
+            
+        Returns:
+            dict: Dictionary containing all visualization data with keys:
+                - ref_point: Reference point on trajectory
+                - next_point: Next point for tangent calculation  
+                - t_hat: Unit tangent vector
+                - e_vec: Error vector (drone_pos - ref_point)
+                - e_l_scalar: Lag error scalar
+                - e_l_vec: Lag error vector
+                - e_c_vec: Contour error vector
+                - t_hat_scaled: Scaled tangent vector for visualization
+                - e_l_vis: Lag error visualization point
+                - e_c_vis: Contour error visualization point
+        """
+        # Get current theta reference point on trajectory
+        theta = self.theta
+        ref_x = self.cs_x(theta)
+        ref_y = self.cs_y(theta)
+        ref_z = self.cs_z(theta)
+        ref_point = np.array([ref_x, ref_y, ref_z])
+
+        # Calculate next point for tangent vector
+        theta_next = theta + 0.0001
+        next_x = self.cs_x(theta_next)
+        next_y = self.cs_y(theta_next)
+        next_z = self.cs_z(theta_next)
+        next_point = np.array([next_x, next_y, next_z])
+
+        # Calculate unit tangent vector t_hat
+        tangent = next_point - ref_point
+        t_hat = tangent / (np.linalg.norm(tangent) + 1e-10)
+        
+        # Error vector e = pos - ref
+        e_vec = drone_pos - ref_point
+        
+        # Calculate Contour Error (e_c) and Lag Error (e_l)
+        e_l_scalar = np.dot(t_hat, e_vec)  # Projection onto tangent
+        e_l_vec = e_l_scalar * t_hat        # Vector in tangent direction
+        e_c_vec = e_vec - e_l_vec           # Orthogonal vector
+        
+        # Scale vectors for better visualization
+        scale_factor = 1
+        t_hat_scaled = ref_point + t_hat * scale_factor
+        e_l_vis = ref_point + e_l_vec
+        e_c_vis = ref_point + e_c_vec
+        
+        return {
+            'ref_point': ref_point,
+            'next_point': next_point,
+            't_hat': t_hat,
+            'e_vec': e_vec,
+            'e_l_scalar': e_l_scalar,
+            'e_l_vec': e_l_vec,
+            'e_c_vec': e_c_vec,
+            't_hat_scaled': t_hat_scaled,
+            'e_l_vis': e_l_vis,
+            'e_c_vis': e_c_vis
+        }
+
+
+    def _handle_gate_update(self, obs: dict[str, NDArray[np.floating]]):
+            """Checks for gate changes and updates the trajectory spline if a new gate is passed."""
+            gates_pos = obs.get("gates_pos", None)
+            gates_visited = obs.get("gates_visited", None)
+
+            # Gate change detection
+            if self._last_gates_visited is not None and gates_visited is not None:
+                if not np.array_equal(gates_visited, self._last_gates_visited):
+                    # Find which specific gate changed
+                    for i, (old, new) in enumerate(zip(self._last_gates_visited, gates_visited)):
+                        if old != new:
+                            # Update waypoint if the gate position is available
+                            if gates_pos is not None and i < len(gates_pos) and i in self.gate_to_waypoint_mapping:
+                                waypoint_idx = self.gate_to_waypoint_mapping[i]
+                                self.waypoints[waypoint_idx] = gates_pos[i]
+                                
+                                # Recreate splines with updated waypoints
+                                ts = np.linspace(0, 1, np.shape(self.waypoints)[0])
+                                self.cs_x = CubicSpline(ts, self.waypoints[:, 0])
+                                self.cs_y = CubicSpline(ts, self.waypoints[:, 1])
+                                self.cs_z = CubicSpline(ts, self.waypoints[:, 2])
+                                
+                                # for visualization
+                                vis_s = np.linspace(0.0, 1.0, 700)
+                                new_traj = np.column_stack((self.cs_x(vis_s), self.cs_y(vis_s), self.cs_z(vis_s)))
+                                self._trajectory_history.append(new_traj.copy())
+
+            # Store for next comparison
+            self._last_gates_visited = gates_visited.copy() if gates_visited is not None else None
+
