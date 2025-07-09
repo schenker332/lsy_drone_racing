@@ -53,7 +53,7 @@ class MPController(Controller):
         ])
 
 
-        # penis
+        # was geht ab
         
         
         ts = np.linspace(0, 1, np.shape(waypoints)[0])
