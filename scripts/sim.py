@@ -15,6 +15,8 @@ import fire
 import gymnasium
 from gymnasium.wrappers.jax_to_numpy import JaxToNumpy
 
+import time
+
 
 
 from lsy_drone_racing.utils import  load_config, load_controller, draw_gates, draw_point, draw_obstacles, generate_parallel_lines,draw_line
@@ -72,7 +74,8 @@ def simulate(
         track=config.env.track,
         disturbances=config.env.get("disturbances"),
         randomizations=config.env.get("randomizations"),
-        seed=config.env.seed,
+        # seed=config.env.seed,
+        seed=int(time.time()) % 100000,
     )
     env = JaxToNumpy(env)
 

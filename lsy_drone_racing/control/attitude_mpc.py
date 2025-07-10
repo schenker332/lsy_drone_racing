@@ -11,6 +11,7 @@ from lsy_drone_racing.control.helper.print_output import print_output
 from lsy_drone_racing.control.helper.datalogger import DataLogger
 import os
 
+arc_length_parametrizaton = False  # Set to True to use arc-length parametrization
 
 
 class MPController(Controller):
@@ -25,50 +26,124 @@ class MPController(Controller):
             config: Configuration of the environment.
         """
         super().__init__(obs, info, config)
+        self.freq = config.env.freq
+        self._tick = 0
 
         
         ### ====================================================================== ###
         ### =========================== Waypoints ================================ ###
         ### ====================================================================== ###
 
-        # Gate-Positionen
-        gates = np.array([
-            [0.55, -0.55, 0.56],  # Gate 0
-            [1.0, -1.05, 1.25],   # Gate 1  
-            [0.0, 1.0, 0.66],     # Gate 2
-            [-0.5, 0.0, 1.11]     # Gate 3
-        ])
+        # # Gate-Positionen
+        # gates = np.array([
+        #     [0.55, -0.55, 0.56],  # Gate 0      [0.45, -0.5, 0.56]
+        #     [1.0, -1.05, 1.25],   # Gate 1      [1.0, -1.05, 1.11]
+        #     [0.0, 1.0, 0.66],     # Gate 2      [0.0, 1.0, 0.56]
+        #     [-0.5, 0.0, 1.11]     # Gate 3      [-0.5, 0.0, 1.11]
+        # ])
+
+
+
+    #     ########## other gate positions
+	#     gates_pos = [
+            # [0.45, -0.5, 0.56], # Gate 0      
+            # [1.0, -1.05, 1.11],  # Gate 1     
+            # [0.0, 1.0, 0.56],    # Gate 2      
+            # [-0.5, 0.0, 1.11]    # Gate 3      
+    #     ]
+
+	# # Euler angles [roll, pitch, yaw] in radians. [0, 0, 0] means no rotation.
+    #     # You can adjust these values if specific gate orientations are needed.
+    #     gates_rpy = [
+    #         [0.0, 0.0, 0.0],  # Gate 0
+    #         [0.0, 0.0, 0.0],  # Gate 1
+    #         [0.0, 0.0, 0.0],  # Gate 2
+    #         [0.0, 0.0, 0.0]   # Gate 3
+    #     ]
+
+    #     # Convert Euler angles to quaternions [x, y, z, w] for the pre_post_points function
+    #     gates_quat = [R.from_euler("xyz", rpy).as_quat() for rpy in gates_rpy]
+
+    #     # --- Dynamic Waypoint Generation (using data from config file) ---
+    #     d_gate = 0.3  # Distance for pre and post gate points. Tune as needed.
         
+    #     pre_post = [pre_post_points(np.array(gates_pos[i]), np.array(gates_quat[i]), d_gate) for i in range(len(gates_pos))]
+    #     pre_gate0, post_gate0 = pre_post[0]
+    #     pre_gate1, post_gate1 = pre_post[1]
+    #     pre_gate2, post_gate2 = pre_post[2]
+    #     pre_gate3, post_gate3 = pre_post[3]
+
+    #     waypoints = np.array([
+    #         # Start to Gate 0
+            # [1.0896959, 1.4088244, 0.2],
+            # [0.95, 1.0, 0.3],
+            # [0.7, 0.1, 0.4],
+    #         pre_gate0,
+    #         gates_pos[0],
+    #         post_gate0,
+    #         # Gate 0 to Gate 1
+    #         [0.4, -1.4, 0.85],
+    #         pre_gate1,
+    #         gates_pos[1],
+    #         post_gate1,
+    #         # Gate 1 to Gate 2
+    #         [0.5, 0.1, 0.8],
+    #         pre_gate2,
+    #         gates_pos[2],
+    #         post_gate2,
+    #         # Gate 2 to Gate 3
+            # [-0.1, gates_pos[2][1]+0.2, 0.7],
+            # [-0.2, gates_pos[2][1]+0.17, 1.0],
+            # [-0.3, 0.4, 1.1],
+    #         pre_gate3,
+    #         gates_pos[3],
+    #         post_gate3,
+    #         # To Finish
+            # [-0.5, -2, 1.11],
+            # [-0.5, -6, 1.11]
+    #     ])
+
+	# ### end of other gate positions
+
+
+
+        gates = np.array([
+            [0.45, -0.5, 0.56],     # Gate 0      
+            [1.0, -1.05, 1.11],     # Gate 1     
+            [0.0, 1.0, 0.56],       # Gate 2      
+            [-0.5, 0.0, 1.11]       # Gate 3     
+        ]) # ### Original Gate-Positionen
+
+
         # Start bis Gate 0
         b0 = np.array([
-            [1.0, 1.5, 0.2],
-            [0.8, 1.0, 0.2],
-            [0.7, 0.1, 0.4]
+            [1.0896959, 1.4088244, 0.2],
+            [0.95, 1.0, 0.3],
+            [0.7, 0.1, 0.4],
         ])
         
         # Gate 0 -- Gate 1
         b1 = np.array([
-            [0.2, -0.7, 0.65],  
-            [0.1, -1.0, 0.75],
-            [0.5, -1.5, 0.8]
+            [0.1, -1.2, 0.75],
+            [0.4, -1.4, 0.85],
         ])
         
         # Gate 1 -- Gate 2
         b2 = np.array([
-            [1.15, -0.75, 1],
-            [0.5, 0, 0.8]
+            [0.5, 0.1, 0.8],
         ])
         
         # Gate 2 -- Gate 3
         b3 = np.array([
-            [-0.2, 1.4, 0.56],
-            [-0.9, 1.3, 0.8],
-            [-0.75, 0.5, 1.11]   
+            [-0.1, gates[2][1]+0.2, 0.7],
+            [-0.2, gates[2][1]+0.17, 1.0],
+            [-0.3, 0.4, 1.1],   
         ])
         
         # nach Gate 3 
         b4 = np.array([
-            [-0.1, -1, 1.11]
+            [-0.5, -2, 1.11],
+            [-0.5, -6, 1.11]
         ])
         
         # Kombiniere alle Waypoints: b0 + gate0 + b1 + gate1 + b2 + gate2 + b3 + gate3 + b4
@@ -97,8 +172,18 @@ class MPController(Controller):
         self.gate_indices = gate_indices
         self.waypoints = waypoints
 
-        
-        ts = np.linspace(0, 1, np.shape(waypoints)[0])
+	# 1. Calculate arc-length based on distance between waypoints.
+        if arc_length_parametrizaton:
+            seg_lens = np.linalg.norm(np.diff(waypoints, axis=0), axis=1)
+            ts_unnormalized = np.hstack(([0.0], np.cumsum(seg_lens)))
+            self.s_total = ts_unnormalized[-1] # Store total path length
+
+            # 2. Normalize the parameter to the [0, 1] range for compatibility.
+            ts = ts_unnormalized / self.s_total
+        else:
+            # 1. Use linear spacing for the parameter t
+            ts = np.linspace(0, 1, np.shape(waypoints)[0])
+
         self.cs_x = CubicSpline(ts, waypoints[:, 0])
         self.cs_y = CubicSpline(ts, waypoints[:, 1])
         self.cs_z = CubicSpline(ts, waypoints[:, 2])
@@ -119,11 +204,11 @@ class MPController(Controller):
         
         self.response_mapping = {
             "g0": [  # Wenn sich Gate 0 ändert
-            ("g0", 1.0, 1.0, 1.0, [0.1, -0.05, 0.0]),  # Gate 0 selbst mit Offset
+            ("g0", 1.0, 1.0, 1.0, [0.0, 0.00, 0.0]),  # Gate 0 selbst mit Offset
             ],
 
             "g1": [  # Wenn sich Gate 1 ändert  
-            ("g1", 1.0, 1.0, 1.0, [0.0, 0.0, 0.2]),    # Gate 1 selbst mit Offset
+            ("g1", 1.0, 1.0, 1.0, [0.0, 0.0, 0.0]),    # Gate 1 selbst mit Offset
             ],
 
             "g2": [  # Wenn sich Gate 2 ändert
@@ -132,7 +217,7 @@ class MPController(Controller):
             ],
 
             "g3": [  # Wenn sich Gate 3 ändert
-            ("g3", 1.0, 1.0, 1.0, [0.0, 0.0, 0.1]),    # Gate 3 selbst mit Offset
+            ("g3", 1.0, 1.0, 1.0, [0.0, 0.0, 0.0]),    # Gate 3 selbst mit Offset
             ],
 
             "o1": [  # Wenn sich Obstacle 1 ändert  
@@ -189,7 +274,6 @@ class MPController(Controller):
 
         self._last_gates_visited = None  # Initialize gate tracking
         self._last_gates_pos = None      # Store previous gate positions for delta calculation
-
 
         self.theta = 0
         self.v_theta = 1/ (6.5 * self.dt * self.freq) ## from niclas with 6 or 7
@@ -325,7 +409,9 @@ class MPController(Controller):
         
         # # print(f"weight: {self.get_weight(min_theta):.2f}")
         # print(f"min_dist: {min_dist:.2f} at theta: {min_theta:.2f}")
-        # print(f"Time: {self._tick/self.freq:.2f}s")
+        print(f"Time: {self._tick/self.freq:.2f}s")
+        # print the current drone positions only
+        print(f"Tick {self._tick}: px={x1[0]:.4f}, py={x1[1]:.4f}, pz={x1[2]:.4f}")
         # print("=" * 20)
 
 
@@ -648,11 +734,23 @@ class MPController(Controller):
         
         # Rebuild splines if any waypoint was updated
         if trajectory_updated:
-            ts = np.linspace(0, 1, len(self.waypoints))
+     # --- 4) Splines neu berechnen ---
+            if arc_length_parametrizaton:
+                # Re-calculate splines using the same arc-length parameterization
+                seg_lens = np.linalg.norm(np.diff(self.waypoints, axis=0), axis=1)
+                ts_unnormalized = np.hstack(([0.0], np.cumsum(seg_lens)))
+                self.s_total = ts_unnormalized[-1] # Store total path length
+
+                # 2. Normalize the parameter to the [0, 1] range for compatibility.
+                ts = ts_unnormalized / self.s_total
+            else:
+                # 1. Use linear spacing for the parameter t
+                ts = np.linspace(0, 1, np.shape(self.waypoints)[0])
+
             self.cs_x = CubicSpline(ts, self.waypoints[:, 0])
             self.cs_y = CubicSpline(ts, self.waypoints[:, 1])
             self.cs_z = CubicSpline(ts, self.waypoints[:, 2])
-            
+
             # Visualization update
             vis_s = np.linspace(0.0, 1.0, 700)
             new_traj = np.column_stack((self.cs_x(vis_s), self.cs_y(vis_s), self.cs_z(vis_s)))
