@@ -25,11 +25,145 @@ class MPController(Controller):
             config: Configuration of the environment.
         """
         super().__init__(obs, info, config)
+
+        
+        ### ====================================================================== ###
+        ### =========================== Waypoints ================================ ###
+        ### ====================================================================== ###
+
+        # Gate-Positionen
+        gates = np.array([
+            [0.55, -0.55, 0.56],  # Gate 0
+            [1.0, -1.05, 1.25],   # Gate 1  
+            [0.0, 1.0, 0.66],     # Gate 2
+            [-0.5, 0.0, 1.11]     # Gate 3
+        ])
+        
+        # Start bis Gate 0
+        b0 = np.array([
+            [1.0, 1.5, 0.2],
+            [0.8, 1.0, 0.2],
+            [0.7, 0.1, 0.4]
+        ])
+        
+        # Gate 0 -- Gate 1
+        b1 = np.array([
+            [0.2, -0.7, 0.65],  
+            [0.1, -1.0, 0.75],
+            [0.5, -1.5, 0.8]
+        ])
+        
+        # Gate 1 -- Gate 2
+        b2 = np.array([
+            [1.15, -0.75, 1],
+            [0.5, 0, 0.8]
+        ])
+        
+        # Gate 2 -- Gate 3
+        b3 = np.array([
+            [-0.2, 1.4, 0.56],
+            [-0.9, 1.3, 0.8],
+            [-0.75, 0.5, 1.11]   
+        ])
+        
+        # nach Gate 3 
+        b4 = np.array([
+            [-0.1, -1, 1.11]
+        ])
+        
+        # Kombiniere alle Waypoints: b0 + gate0 + b1 + gate1 + b2 + gate2 + b3 + gate3 + b4
+        waypoint_sections = [b0, gates[0:1], b1, gates[1:2], b2, gates[2:3], b3, gates[3:4], b4]
+        waypoints = np.vstack(waypoint_sections)
+        
+        # Automatische Indizes berechnen
+        current_index = 0
+        gate_indices = []
+        waypoint_blocks = {}
+        
+        for i, section in enumerate(waypoint_sections):
+            section_length = len(section)
+            
+            if i % 2 == 1:  # Ungerade Indizes sind Gates (1, 3, 5, 7)
+                gate_idx = i // 2  # 0, 1, 2, 3
+                gate_indices.append(current_index)
+            else:  # Gerade Indizes sind Waypoint-Blöcke (0, 2, 4, 6, 8)
+                block_idx = i // 2  # 0, 1, 2, 3, 4
+                waypoint_blocks[block_idx] = list(range(current_index, current_index + section_length))
+            
+            current_index += section_length
+        
+        # Store strukturierte Daten
+        self.waypoint_blocks = waypoint_blocks
+        self.gate_indices = gate_indices
+        self.waypoints = waypoints
+
+        
+        ts = np.linspace(0, 1, np.shape(waypoints)[0])
+        self.cs_x = CubicSpline(ts, waypoints[:, 0])
+        self.cs_y = CubicSpline(ts, waypoints[:, 1])
+        self.cs_z = CubicSpline(ts, waypoints[:, 2])
+
+
+        ### ====================================================================== ###
+        ### =========================== Mapping ================================== ###
+        ### ====================================================================== ###
+
+        
+        # Automatisches Gate-zu-Waypoint-Mapping
+        self.gate_to_waypoint_mapping = {i: gate_indices[i] for i in range(len(gate_indices))}
+
+        # ===== EINHEITLICHES RESPONSE-MAPPING =====
+        # Format: "trigger": [("target", x_factor, y_factor, z_factor, [offset_x, offset_y, offset_z])]
+        # Trigger: "g0", "g1", "g2", "g3" für Gates oder "o0", "o1", "o2", "o3" für Obstacles
+        # Target: "g0", "g1", etc. für Gates oder "b0.1", "b1.0", etc. für Block-Waypoints
+        
+        self.response_mapping = {
+            "g0": [  # Wenn sich Gate 0 ändert
+            ("g0", 1.0, 1.0, 1.0, [0.1, -0.05, 0.0]),  # Gate 0 selbst mit Offset
+            ],
+
+            "g1": [  # Wenn sich Gate 1 ändert  
+            ("g1", 1.0, 1.0, 1.0, [0.0, 0.0, 0.2]),    # Gate 1 selbst mit Offset
+            ],
+
+            "g2": [  # Wenn sich Gate 2 ändert
+            ("g2", 1.0, 1.0, 1.0, [0.0, 0.0, 0.0]),    # Gate 2 selbst (kein Offset)
+            ("b2.0", 0.3, 0.5, 0.0, [0.0, 0.0, 0.0]),  # Block 2, Waypoint 0
+            ],
+
+            "g3": [  # Wenn sich Gate 3 ändert
+            ("g3", 1.0, 1.0, 1.0, [0.0, 0.0, 0.1]),    # Gate 3 selbst mit Offset
+            ],
+
+            "o1": [  # Wenn sich Obstacle 1 ändert  
+            ("b1.0", 1.0, 1.0, 0.0, [0.0, 0.0, 0.0]),  # Block 1, Waypoint 0 (at obstacle 2)
+            ("b1.1", 1.0, 1.0, 0.0, [0.0, 0.0, 0.0]),  # Block 1, Waypoint 1
+            ("b1.2", 1.0, 1.0, 0.0, [0.0, 0.0, 0.0]),  # Block 1, Waypoint 2
+            ],
+
+            "o3": [  # Wenn sich Obstacle 3 ändert
+            ("b3.2", 1.0, 1.0, 0.0, [0.0, 0.0, 0.0]),  # Block 3, Waypoint 2 (at obstacle 4)
+            ],
+        }
+        
+        self._last_obstacles_pos = None  # Store previous obstacle positions
+
+        # for visualization 
+        vis_s = np.linspace(0.0, 1.0, 700)
+        self._trajectory_history = []  # Store all trajectories for visualization
+        temp = np.column_stack((self.cs_x(vis_s), self.cs_y(vis_s), self.cs_z(vis_s)))
+        self._trajectory_history.append(temp.copy())  
+
+
+        ### ====================================================================== ###
+        ### ============================ Settings ================================ ###
+        ### ====================================================================== ###
+
         self.freq = config.env.freq
         self._tick = 0
 
         # Toggle logging by setting this flag to True or False
-        self.logging_enabled = True
+        self.logging_enabled = False
         if  self.logging_enabled:
             # Initialize logger
             self.logger = DataLogger(log_dir="logs")
@@ -42,52 +176,6 @@ class MPController(Controller):
         self.T_HORIZON = 1.5           # Time horizon in seconds
         self.dt = self.T_HORIZON / self.N  # Step size
 
-        waypoints = np.array(
-        [
-            [1.0, 1.5, 0.2],
-            [0.8, 1.0, 0.2],
-            [0.7, 0.1, 0.4],
-            [0.55, -0.55, 0.56],  # gate1 - 3 0.45  -0.5
-            [0.2, -0.7, 0.65],   # at obstacle 2
-            [0.1, -1.0, 0.75],
-            [0.5, -1.5, 0.8],
-            [1, -1.05, 1.25],    # gate2 1.1 -7
-            [1.15, -0.75, 1],
-            [0.5, 0, 0.8],
-            [0, 1, 0.66],        # gate3 .56 -10
-            [-0.2, 1.4, 0.56],
-            [-0.9, 1.3, 0.8], 
-            [-0.75, 0.5, 1.11],   # at obastacle 4 -13
-            [-0.5, 0, 1.11],     # gate4 -14
-	        [-0.1, -1, 1.11]
-	        # old final point of max below, potential issue for shortcut
-            #[-0.6, -2, 1.11] # point after gate for clean trajectory to finish 
-            ### LEARNING: Last poun needs to be really far out for a smooth trajectory though the gate (at least with our current trajectory calculation)
-        ])
-
-
-        
-        
-        ts = np.linspace(0, 1, np.shape(waypoints)[0])
-        self.cs_x = CubicSpline(ts, waypoints[:, 0])
-        self.cs_y = CubicSpline(ts, waypoints[:, 1])
-        self.cs_z = CubicSpline(ts, waypoints[:, 2])
-
-
-        self.theta = 0
-        self.v_theta = 1/ (6.5 * self.dt * self.freq) ## from niclas with 6 or 7
-        gate_indices = [3, 7, 10, 14]
-        self.gate_thetas = [ts[i] for i in gate_indices]
-        ### LEARNING: Weights that are higher than 60 can cause huge issues, 
-        # if the drone is not able to get the curve (i.e. reversing back, crashing into the gate, 
-        # or deliberately missting the gate to avoid a high off-center penalty)
-        self.gate_peak_weights = [100, 80, 60, 100] # [40, 80, 60, 140]. //// [140, 140, 140, 140] 
-	
-
-
-        # Create the optimal control problem solver
-        self.acados_ocp_solver, self.ocp = create_ocp_solver(self.T_HORIZON, self.N)
-
         # Initialize state variables    
         self.last_f_collective = 0.3  # Current thrust value
         self.last_f_cmd = 0.3     # Commanded thrust value
@@ -97,54 +185,21 @@ class MPController(Controller):
         self.config = config
         self.finished = False
         self._info = info
-        self.waypoints = waypoints
         self._path_log = []
 
         self._last_gates_visited = None  # Initialize gate tracking
         self._last_gates_pos = None      # Store previous gate positions for delta calculation
+
+
+        self.theta = 0
+        self.v_theta = 1/ (6.5 * self.dt * self.freq) ## from niclas with 6 or 7
         
-        self.gate_to_waypoint_mapping = {
-            0: 3,   # Gate 0 -> Waypoint 3
-            1: 7,   # Gate 1 -> Waypoint 7  
-            2: 10,   # Gate 2 -> Waypoint 10
-            3: 14,   # Gate 3 -> Waypoint 13
+        # Automatische Gate-Thetas basierend auf berechneten Indizes
+        self.gate_thetas = [ts[i] for i in gate_indices]
+        self.gate_peak_weights = [100, 80, 60, 100] # [40, 80, 60, 140]. //// [140, 140, 140, 140] 
 
-        }
-
-        # factor = 1.0 bedeutet volle Verschiebung, 0.5 bedeutet halbe Verschiebung, etc.
-        self.relative_waypoint_mapping = {
-            # 3: [(14, 1.0)],  # Gate 3 verschiebt Waypoint 14 mit voller Stärke
-        }
-
-
-        self.obstacle_waypoint_mapping = {
-            3: [(13, 1.0, 1.0, 0.0)],     # Obstacle 3 -> WP 14: folgt X&Y komplett, Z bleibt
-            # 0: [(5, 0.5, 1.0, 0.0),       # Obstacle 0 -> WP 5: X zur Hälfte, Y komplett, Z bleibt
-            #     (6, -0.3, 0.0, 0.0)],     # Obstacle 0 -> WP 6: X entgegengesetzt (-0.3m), Y&Z bleiben
-            # 1: [(8, 1.0, 0.0, 0.5)]       # Obstacle 1 -> WP 8: X komplett, Y bleibt, Z zur Hälfte
-            1: [(4, 1.0, 1.0, 0.0)] ,      # Obstacle 1 -> WP 8: X komplett, Y bleibt, Z zur Hälfte
-            1: [(5, 1.0, 1.0, 0.0)],       
-            1: [(6, 1.0, 1.0, 0.0)],
-            1: [(7, 1.2, 1.0, 0.0)],       # Obstacle 1 -> WP 8: X komplett, Y bleibt, Z zur Hälfte
-        }
-        
-        self._last_obstacles_pos = None  # Store previous obstacle positions
-
-        # Gate-Offsets für feinere Kontrolle der Flugbahn
-        # Format: [dx, dy, dz] in Meter
-        self.gate_offsets = {
-            0: np.array([0.1, -0.05, 0.0]),    # Kein Offset für Gate 0
-            1: np.array([0.0, 0.0, 0.2]),    # Kein Offset für Gate 1
-            2: np.array([0.0, 0.0, 0.0]),    # Offset für Gate 2: 20cm rechts, 10cm höher
-            3: np.array([0.0, 0.0, 0.1])   # Offset für Gate 3: 10cm links, 15cm höher
-        }
-
-        # for visualization 
-        vis_s = np.linspace(0.0, 1.0, 700)
-        self._trajectory_history = []  # Store all trajectories for visualization
-        temp = np.column_stack((self.cs_x(vis_s), self.cs_y(vis_s), self.cs_z(vis_s)))
-        self._trajectory_history.append(temp.copy())  
-
+        # Create the optimal control problem solver
+        self.acados_ocp_solver, self.ocp = create_ocp_solver(self.T_HORIZON, self.N)
 
 
 
@@ -191,8 +246,7 @@ class MPController(Controller):
         _,_,min_theta = self.compute_min_distance_to_trajectory(obs["pos"])
 
         # update trajectory
-        self._handle_gate_update(obs)
-        self._handle_obstacle_update(obs)  # Neue Zeile für Obstacle-Updates
+        self._handle_unified_update(obs)
         obs_array = obs["obstacles_pos"]          # shape=(4,3)
         obs_flat = obs_array.reshape(-1)
 
@@ -341,7 +395,15 @@ class MPController(Controller):
 
     def get_trajectory(self) -> NDArray[np.floating]:
         return self._trajectory_history
-        
+    
+    def get_waypoints(self) -> NDArray[np.floating]:
+        return {
+            'waypoints': self.waypoints,
+            'gate_indices': self.gate_indices,
+            'waypoint_blocks': self.waypoint_blocks,
+            'gate_to_waypoint_mapping': self.gate_to_waypoint_mapping
+        }
+
     def get_prediction_horizon(self) -> NDArray[np.floating]:
         """Get the predicted position trajectory for the planning horizon.
         
@@ -516,110 +578,83 @@ class MPController(Controller):
         }
 
 
-    def _handle_gate_update(self, obs: dict[str, NDArray[np.floating]]):
-            """Checks for gate changes and updates the trajectory spline if a new gate is passed."""
-            gates_pos = obs.get("gates_pos", None)
-            gates_visited = obs.get("gates_visited", None)
-
-            # Gate change detection
-            if self._last_gates_visited is not None and gates_visited is not None:
-                if not np.array_equal(gates_visited, self._last_gates_visited):
-                    # Find which specific gate changed
-                    for i, (old, new) in enumerate(zip(self._last_gates_visited, gates_visited)):
-                        if old != new and gates_pos is not None and i < len(gates_pos):
-                            # --- 1) Berechne neue und alte finale Gate-Position inkl. Offset ---
-                            new_gate_pos = gates_pos[i].copy()
-                            old_gate_pos = (self._last_gates_pos[i]
-                                            if self._last_gates_pos is not None
-                                            else new_gate_pos)
-                            
-                            # Offset-Logik für neue Position
-                            if i in self.gate_offsets:
-                                gates_orn = obs.get("gates_orn", None)
-                                if gates_orn is not None and i < len(gates_orn):
-                                    # Anwenden der Rotation auf den Offset
-                                    offset_local = self.gate_offsets[i]
-                                    rot = R.from_quat(gates_orn[i])
-                                    offset_global = rot.apply(offset_local)
-                                    new_gate_pos += offset_global
-                                    # Auch alte Position mit gleichem Offset für korrekte Delta-Berechnung
-                                    old_gate_pos += offset_global
-                                else:
-                                    # Wenn keine Orientierung verfügbar, einfachen Offset anwenden
-                                    new_gate_pos += self.gate_offsets[i]
-                                    old_gate_pos += self.gate_offsets[i]
-                            
-                            # Δ-Verschiebung berechnen
-                            delta = new_gate_pos - old_gate_pos
-                            
-                            # --- 2) Haupt-Waypoint für dieses Gate updaten ---
-                            if i in self.gate_to_waypoint_mapping:
-                                waypoint_idx = self.gate_to_waypoint_mapping[i]
-                                self.waypoints[waypoint_idx] = new_gate_pos
-                            
-                            # --- 3) Alle in relative_waypoint_mapping definierten Waypoints updaten ---
-                            if i in self.relative_waypoint_mapping:
-                                for wp_rel, factor in self.relative_waypoint_mapping[i]:
-                                    # Prüfe Index-Gültigkeit
-                                    if 0 <= wp_rel < len(self.waypoints):
-                                        # Wende die Verschiebung mit dem angegebenen Faktor an
-                                        self.waypoints[wp_rel] += delta * factor
-                            
-                            # --- 4) Splines neu berechnen ---
-                            ts = np.linspace(0, 1, np.shape(self.waypoints)[0])
-                            self.cs_x = CubicSpline(ts, self.waypoints[:, 0])
-                            self.cs_y = CubicSpline(ts, self.waypoints[:, 1])
-                            self.cs_z = CubicSpline(ts, self.waypoints[:, 2])
-                            
-                            # for visualization
-                            vis_s = np.linspace(0.0, 1.0, 700)
-                            new_traj = np.column_stack((self.cs_x(vis_s), self.cs_y(vis_s), self.cs_z(vis_s)))
-                            self._trajectory_history.append(new_traj.copy())
-
-            # Store for next comparison
-            self._last_gates_visited = gates_visited.copy() if gates_visited is not None else None
-            self._last_gates_pos = gates_pos.copy() if gates_pos is not None else None
-
-    def _handle_obstacle_update(self, obs: dict[str, NDArray[np.floating]]):
-        """Updates waypoints based on obstacle position changes with individual X/Y/Z factors."""
+    def _handle_unified_update(self, obs: dict[str, NDArray[np.floating]]):
+        """Handles both gate and obstacle changes with unified response mapping."""
+        
+        # Handle Gate Changes
+        gates_pos = obs.get("gates_pos", None)
+        gates_visited = obs.get("gates_visited", None)
+        
+        if self._last_gates_visited is not None and gates_visited is not None and gates_pos is not None:
+            if not np.array_equal(gates_visited, self._last_gates_visited):
+                for i, (old, new) in enumerate(zip(self._last_gates_visited, gates_visited)):
+                    if old != new and i < len(gates_pos):
+                        old_pos = self._last_gates_pos[i] if self._last_gates_pos is not None else gates_pos[i]
+                        # Nur response_mapping anwenden, keine automatische Gate-Positionierung
+                        self._apply_unified_response(f"g{i}", gates_pos[i], old_pos)
+        
+        # Handle Obstacle Changes  
         obstacles_pos = obs.get("obstacles_pos", None)
         
-        if obstacles_pos is not None:
-            # Wenn wir vorherige Obstacle-Positionen haben, prüfe auf Änderungen
-            if self._last_obstacles_pos is not None:
-                for i, (old_pos, new_pos) in enumerate(zip(self._last_obstacles_pos, obstacles_pos)):
-                    # Prüfe ob sich die Position geändert hat (mit kleiner Toleranz)
-                    if np.linalg.norm(new_pos - old_pos) > 0.001:  # 1mm Toleranz
-                        # Prüfe ob für dieses Obstacle ein Mapping existiert
-                        if i in self.obstacle_waypoint_mapping:
-                            # Berechne Delta-Verschiebung des Obstacles
-                            delta = new_pos - old_pos
-                            
-                            # Gehe durch alle Waypoints, die von diesem Obstacle beeinflusst werden
-                            for waypoint_idx, x_factor, y_factor, z_factor in self.obstacle_waypoint_mapping[i]:
-                                # Prüfe Index-Gültigkeit
-                                if 0 <= waypoint_idx < len(self.waypoints):
-                                    # Berechne individuelle Verschiebung für jeden Waypoint
-                                    waypoint_delta = np.array([
-                                        delta[0] * x_factor,  # X-Verschiebung mit X-Faktor
-                                        delta[1] * y_factor,  # Y-Verschiebung mit Y-Faktor
-                                        delta[2] * z_factor   # Z-Verschiebung mit Z-Faktor
-                                    ])
-                                    
-                                    # Waypoint aktualisieren
-                                    self.waypoints[waypoint_idx] += waypoint_delta
-                            
-                            # Splines nur einmal pro Obstacle neu berechnen (nach allen Waypoint-Updates)
-                            ts = np.linspace(0, 1, len(self.waypoints))
-                            self.cs_x = CubicSpline(ts, self.waypoints[:, 0])
-                            self.cs_y = CubicSpline(ts, self.waypoints[:, 1])
-                            self.cs_z = CubicSpline(ts, self.waypoints[:, 2])
-                            
-                            # Visualization update
-                            vis_s = np.linspace(0.0, 1.0, 700)
-                            new_traj = np.column_stack((self.cs_x(vis_s), self.cs_y(vis_s), self.cs_z(vis_s)))
-                            self._trajectory_history.append(new_traj.copy())
+        if obstacles_pos is not None and self._last_obstacles_pos is not None:
+            for i, (old_pos, new_pos) in enumerate(zip(self._last_obstacles_pos, obstacles_pos)):
+                if np.linalg.norm(new_pos - old_pos) > 0.001:
+                    self._apply_unified_response(f"o{i}", new_pos, old_pos)
+        
+        # Store for next comparison
+        self._last_gates_visited = gates_visited.copy() if gates_visited is not None else None
+        self._last_gates_pos = gates_pos.copy() if gates_pos is not None else None
+        self._last_obstacles_pos = obstacles_pos.copy() if obstacles_pos is not None else None
+
+    def _apply_unified_response(self, trigger_id: str, new_pos: np.ndarray, old_pos: np.ndarray):
+        """Apply unified response mapping for any trigger (gate or obstacle change)."""
+        
+        if trigger_id not in self.response_mapping:
+            return
+        
+        delta = new_pos - old_pos
+        trajectory_updated = False
+        
+        for target, x_factor, y_factor, z_factor, offset in self.response_mapping[trigger_id]:
             
-            # Aktuelle Positionen für nächsten Vergleich speichern
-            self._last_obstacles_pos = obstacles_pos.copy()
+            # Calculate response with factors and offset
+            response_delta = np.array([
+                delta[0] * x_factor + offset[0],
+                delta[1] * y_factor + offset[1], 
+                delta[2] * z_factor + offset[2]
+            ])
+            
+            # Apply to target
+            if target.startswith("g"):  # Gate target
+                gate_idx = int(target[1:])
+                if gate_idx in self.gate_to_waypoint_mapping:
+                    wp_idx = self.gate_to_waypoint_mapping[gate_idx]
+                    if 0 <= wp_idx < len(self.waypoints):
+                        self.waypoints[wp_idx] += response_delta
+                        trajectory_updated = True
+                        
+            elif target.startswith("b"):  # Block waypoint target
+                # Parse "b2.1" -> block=2, waypoint_in_block=1
+                parts = target[1:].split(".")
+                block_idx = int(parts[0])
+                wp_in_block = int(parts[1])
+                
+                if block_idx in self.waypoint_blocks:
+                    if wp_in_block < len(self.waypoint_blocks[block_idx]):
+                        wp_idx = self.waypoint_blocks[block_idx][wp_in_block]
+                        if 0 <= wp_idx < len(self.waypoints):
+                            self.waypoints[wp_idx] += response_delta
+                            trajectory_updated = True
+        
+        # Rebuild splines if any waypoint was updated
+        if trajectory_updated:
+            ts = np.linspace(0, 1, len(self.waypoints))
+            self.cs_x = CubicSpline(ts, self.waypoints[:, 0])
+            self.cs_y = CubicSpline(ts, self.waypoints[:, 1])
+            self.cs_z = CubicSpline(ts, self.waypoints[:, 2])
+            
+            # Visualization update
+            vis_s = np.linspace(0.0, 1.0, 700)
+            new_traj = np.column_stack((self.cs_x(vis_s), self.cs_y(vis_s), self.cs_z(vis_s)))
+            self._trajectory_history.append(new_traj.copy())
 

@@ -13,6 +13,6 @@ To give you an idea of what you need to do, we also include some example impleme
   controller that follows a pre-defined attitude using cubic spline interpolation.
 """
 
-from lsy_drone_racing.control.controller import Controller
+from lsy_drone_racing.control.rest.controller import Controller
 
 __all__ = ["Controller"]

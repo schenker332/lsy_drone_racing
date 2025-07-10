@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 import fire
 import gymnasium
 from gymnasium.wrappers.jax_to_numpy import JaxToNumpy
-import numpy as np
+
 
 
 from lsy_drone_racing.utils import  load_config, load_controller, draw_gates, draw_point, draw_obstacles, generate_parallel_lines,draw_line
@@ -23,7 +23,7 @@ from lsy_drone_racing.utils.visualizer import SimVisualizer
 if TYPE_CHECKING:
     from ml_collections import ConfigDict
 
-    from lsy_drone_racing.control.controller import Controller
+    from lsy_drone_racing.control.rest.controller import Controller
     from lsy_drone_racing.envs.drone_race import DroneRaceEnv
 logger = logging.getLogger(__name__)
 import warnings

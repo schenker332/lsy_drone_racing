@@ -46,12 +46,13 @@ class SimVisualizer:
         trajectories = controller.get_trajectory()
         _,min_traj_pos,_ = controller.compute_min_distance_to_trajectory(drone_pos)
         vis_data = controller.get_visualization_data(drone_pos)
-        
-        # Extract data for easier access
-        ref_point = vis_data['ref_point']
-        t_hat_scaled = vis_data['t_hat_scaled']
-        e_c_vis = vis_data['e_c_vis']
-        e_l_vis = vis_data['e_l_vis']
+
+
+        # # Extract data for easier access
+        # ref_point = vis_data['ref_point']
+        # t_hat_scaled = vis_data['t_hat_scaled']
+        # e_c_vis = vis_data['e_c_vis']
+        # e_l_vis = vis_data['e_l_vis']
                 
 
         # # Draw all trajectories except the last one
@@ -128,11 +129,11 @@ class SimVisualizer:
             draw_point(env, update_point, size=0.03, rgba=np.array([0.94, 0.78, 0.67, 1.0]))
 
 
-        draw_point(env, ref_point, size=0.01, rgba=np.array([1.0, 1.0, 0.0, 0.8]))  # Referenzpunkt (gelb)
-        draw_line(env, np.vstack([ref_point, t_hat_scaled]), rgba=np.array([0.0, 0.0, 1.0, 1.0]), min_size=2.0, max_size=2.0)  # Tangentenvektor (blau)
-        draw_line(env, np.vstack([ref_point, drone_pos]), rgba=np.array([1.0, 0.0, 0.0, 1.0]), min_size=2.0, max_size=2.0)  # Fehlervektor e (rot)
-        draw_line(env, np.vstack([ref_point, e_c_vis]), rgba=np.array([0.0, 1.0, 0.0, 1.0]), min_size=2.0, max_size=2.0)  # Contour Error (grün)
-        draw_line(env, np.vstack([ref_point, e_l_vis]), rgba=np.array([1.0, 0.0, 1.0, 1.0]), min_size=2.0, max_size=2.0)  # Lag Error (magenta)
+        # draw_point(env, ref_point, size=0.01, rgba=np.array([1.0, 1.0, 0.0, 0.8]))  # Referenzpunkt (gelb)
+        # draw_line(env, np.vstack([ref_point, t_hat_scaled]), rgba=np.array([0.0, 0.0, 1.0, 1.0]), min_size=2.0, max_size=2.0)  # Tangentenvektor (blau)
+        # draw_line(env, np.vstack([ref_point, drone_pos]), rgba=np.array([1.0, 0.0, 0.0, 1.0]), min_size=2.0, max_size=2.0)  # Fehlervektor e (rot)
+        # draw_line(env, np.vstack([ref_point, e_c_vis]), rgba=np.array([0.0, 1.0, 0.0, 1.0]), min_size=2.0, max_size=2.0)  # Contour Error (grün)
+        # draw_line(env, np.vstack([ref_point, e_l_vis]), rgba=np.array([1.0, 0.0, 1.0, 1.0]), min_size=2.0, max_size=2.0)  # Lag Error (magenta)
 
 
         
@@ -142,3 +143,17 @@ class SimVisualizer:
 
         
 
+ # Draw waypoints
+        waypoint_info = controller.get_waypoints()
+        waypoints = waypoint_info['waypoints']
+        gate_indices = waypoint_info['gate_indices']
+        
+        # Draw normal waypoints (small blue points)
+        for i, wp in enumerate(waypoints):
+            if i not in gate_indices:  # Only draw non-gate waypoints
+                draw_point(env, wp, size=0.02, rgba=np.array([0.0, 0.0, 1.0, 0.7]))  # Blue
+        
+        # Draw gate waypoints (larger red points)
+        for gate_idx in gate_indices:
+            if gate_idx < len(waypoints):
+                draw_point(env, waypoints[gate_idx], size=0.03, rgba=np.array([1.0, 0.0, 0.0, 0.9]))  # Red
