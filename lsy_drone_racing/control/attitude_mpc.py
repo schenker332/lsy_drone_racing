@@ -8,6 +8,8 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 from lsy_drone_racing.control.create_ocp_solver import create_ocp_solver
 from lsy_drone_racing.control.helper.print_output import print_output
+from lsy_drone_racing.control.helper.datalogger import DataLogger
+import os
 
 
 
@@ -25,6 +27,15 @@ class MPController(Controller):
         super().__init__(obs, info, config)
         self.freq = config.env.freq
         self._tick = 0
+
+        # Toggle logging by setting this flag to True or False
+        self.logging_enabled = True
+        if  self.logging_enabled:
+            # Initialize logger
+            self.logger = DataLogger(log_dir="logs")
+            self._last_log_time = -1
+        else:
+            self.logger = None
 
         # MPC parameters
         self.N = 40                    # Number of discretization steps
@@ -151,11 +162,23 @@ class MPController(Controller):
             The collective thrust and orientation [t_des, r_des, p_des, y_des] as a numpy array.
         """
 
+
+
         if self.theta >= 1.2:
             self.finished = True
             
         # Construct the current state vector for the MPC solver
         xcurrent = np.concatenate((obs["pos"], obs["vel"],  R.from_quat(obs["quat"]).as_euler("xyz", degrees=False), [self.last_f_collective, self.last_f_cmd], self.last_rpy_cmd, [ self.theta, self.v_theta]) )
+        
+        # Log state vector every 0.1 seconds
+        if self.logger:
+            current_time = self._tick / self.freq
+            if current_time - self._last_log_time >= 0.01:
+                self.logger.log_state(current_time, xcurrent)
+                self._last_log_time = current_time
+        
+        
+        
         self.acados_ocp_solver.set(0, "lbx", xcurrent)
         self.acados_ocp_solver.set(0, "ubx", xcurrent)
 
@@ -305,7 +328,13 @@ class MPController(Controller):
         Args:
             curr_time: Current simulation time.
         """
-        pass
+        if self.logger:
+            self.logger.log_final_positions(
+                gates_pos=self._info.get("gates_pos"),
+                obstacles_pos=self._info.get("obstacles_pos")
+            )
+            self.logger.close()
+        # pass
 
 
 
