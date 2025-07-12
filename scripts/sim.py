@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 import fire
 import gymnasium
 from gymnasium.wrappers.jax_to_numpy import JaxToNumpy
+import time
 
 
 
@@ -72,7 +73,7 @@ def simulate(
         track=config.env.track,
         disturbances=config.env.get("disturbances"),
         randomizations=config.env.get("randomizations"),
-        seed=config.env.seed,
+        seed=int(time.time()) % 100000,
     )
     env = JaxToNumpy(env)
 

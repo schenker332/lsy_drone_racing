@@ -48,11 +48,11 @@ class SimVisualizer:
         vis_data = controller.get_visualization_data(drone_pos)
 
 
-        # # Extract data for easier access
-        # ref_point = vis_data['ref_point']
-        # t_hat_scaled = vis_data['t_hat_scaled']
-        # e_c_vis = vis_data['e_c_vis']
-        # e_l_vis = vis_data['e_l_vis']
+        # Extract data for easier access
+        ref_point = vis_data['ref_point']
+        t_hat_scaled = vis_data['t_hat_scaled']
+        e_c_vis = vis_data['e_c_vis']
+        e_l_vis = vis_data['e_l_vis']
                 
 
         # # Draw all trajectories except the last one
@@ -101,35 +101,35 @@ class SimVisualizer:
                         rgba=np.array([0.94, 0.78, 0.67, 0.5]))  # Semi-transparent skin color
             
 
-        # Check if gate positions have changed
-        if "gates_pos" in obs:
-            gates_pos = obs["gates_pos"]
-            for gate_idx, gate_pos in enumerate(gates_pos):
-                if gate_idx not in self.last_gates_positions or not np.array_equal(gate_pos, self.last_gates_positions[gate_idx]):
-                    # A gate position has changed or is observed for the first time
-                    self.gate_update_points.append(obs["pos"])
-                    self.last_gates_positions[gate_idx] = gate_pos.copy()  # Store a copy of the position
+        # # Check if gate positions have changed
+        # if "gates_pos" in obs:
+        #     gates_pos = obs["gates_pos"]
+        #     for gate_idx, gate_pos in enumerate(gates_pos):
+        #         if gate_idx not in self.last_gates_positions or not np.array_equal(gate_pos, self.last_gates_positions[gate_idx]):
+        #             # A gate position has changed or is observed for the first time
+        #             self.gate_update_points.append(obs["pos"])
+        #             self.last_gates_positions[gate_idx] = gate_pos.copy()  # Store a copy of the position
 
-        # Draw gate update points 
-        for update_point in self.gate_update_points:
-            draw_point(env, update_point, size=0.03, rgba=np.array([0.0, 0.7, 1.0, 1.0]))
+        # # Draw gate update points 
+        # for update_point in self.gate_update_points:
+        #     draw_point(env, update_point, size=0.03, rgba=np.array([0.0, 0.7, 1.0, 1.0]))
 
         
-        # Check if obstacle positions have changed
-        if "obstacles_pos" in obs:
-            obstacles_pos = obs["obstacles_pos"]
-            for obs_idx, obs_pos in enumerate(obstacles_pos):
-                if obs_idx not in self.last_obstacles_positions or not np.array_equal(obs_pos, self.last_obstacles_positions[obs_idx]):
-                    # An obstacle was observed for the first time or has changed position
-                    self.obstacle_update_points.append(obs["pos"])
-                    self.last_obstacles_positions[obs_idx] = obs_pos.copy()  # Store a copy of the position
+        # # Check if obstacle positions have changed
+        # if "obstacles_pos" in obs:
+        #     obstacles_pos = obs["obstacles_pos"]
+        #     for obs_idx, obs_pos in enumerate(obstacles_pos):
+        #         if obs_idx not in self.last_obstacles_positions or not np.array_equal(obs_pos, self.last_obstacles_positions[obs_idx]):
+        #             # An obstacle was observed for the first time or has changed position
+        #             self.obstacle_update_points.append(obs["pos"])
+        #             self.last_obstacles_positions[obs_idx] = obs_pos.copy()  # Store a copy of the position
         
-        # Draw obstacle update points
-        for update_point in self.obstacle_update_points:
-            draw_point(env, update_point, size=0.03, rgba=np.array([0.94, 0.78, 0.67, 1.0]))
+        # # Draw obstacle update points
+        # for update_point in self.obstacle_update_points:
+        #     draw_point(env, update_point, size=0.03, rgba=np.array([0.94, 0.78, 0.67, 1.0]))
 
 
-        # draw_point(env, ref_point, size=0.01, rgba=np.array([1.0, 1.0, 0.0, 0.8]))  # Referenzpunkt (gelb)
+        draw_point(env, ref_point, size=0.02, rgba=np.array([1.0, 1.0, 0.0, 0.8]))  # Referenzpunkt (gelb)
         # draw_line(env, np.vstack([ref_point, t_hat_scaled]), rgba=np.array([0.0, 0.0, 1.0, 1.0]), min_size=2.0, max_size=2.0)  # Tangentenvektor (blau)
         # draw_line(env, np.vstack([ref_point, drone_pos]), rgba=np.array([1.0, 0.0, 0.0, 1.0]), min_size=2.0, max_size=2.0)  # Fehlervektor e (rot)
         # draw_line(env, np.vstack([ref_point, e_c_vis]), rgba=np.array([0.0, 1.0, 0.0, 1.0]), min_size=2.0, max_size=2.0)  # Contour Error (grün)

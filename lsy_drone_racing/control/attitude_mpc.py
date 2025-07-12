@@ -9,7 +9,8 @@ if TYPE_CHECKING:
 from lsy_drone_racing.control.create_ocp_solver import create_ocp_solver
 from lsy_drone_racing.control.helper.print_output import print_output
 from lsy_drone_racing.control.helper.datalogger import DataLogger
-import os
+
+
 
 
 
@@ -33,10 +34,10 @@ class MPController(Controller):
 
         # Gate-Positionen
         gates = np.array([
-            [0.55, -0.55, 0.56],  # Gate 0
-            [1.0, -1.05, 1.25],   # Gate 1  
-            [0.0, 1.0, 0.66],     # Gate 2
-            [-0.5, 0.0, 1.11]     # Gate 3
+            [0.55, -0.55, 0.56],  # Gate 0      [0.45, -0.5, 0.56]
+            [1.0, -1.05, 1.25],   # Gate 1      [1.0, -1.05, 1.11]
+            [0.1, 1.0, 0.56],     # Gate 2      [0.0, 1.0, 0.56]
+            [-0.5, 0.0, 1.11]     # Gate 3      [-0.5, 0.0, 1.11]
         ])
         
         # Start bis Gate 0
@@ -61,7 +62,7 @@ class MPController(Controller):
         
         # Gate 2 -- Gate 3
         b3 = np.array([
-            [-0.2, 1.4, 0.56],
+            [-0.2, 1.5, 0.56],
             [-0.9, 1.3, 0.8],
             [-0.75, 0.5, 1.11]   
         ])
@@ -119,11 +120,11 @@ class MPController(Controller):
         
         self.response_mapping = {
             "g0": [  # Wenn sich Gate 0 ändert
-            ("g0", 1.0, 1.0, 1.0, [0.1, -0.05, 0.0]),  # Gate 0 selbst mit Offset
+            ("g0", 1.0, 1.0, 1.0, [0.0, 0.0, 0.0]),  # Gate 0 selbst mit Offset
             ],
 
             "g1": [  # Wenn sich Gate 1 ändert  
-            ("g1", 1.0, 1.0, 1.0, [0.0, 0.0, 0.2]),    # Gate 1 selbst mit Offset
+            ("g1", 1.0, 1.0, 1.0, [0.0, 0.0, 0.0]),    # Gate 1 selbst mit Offset
             ],
 
             "g2": [  # Wenn sich Gate 2 ändert
@@ -132,7 +133,7 @@ class MPController(Controller):
             ],
 
             "g3": [  # Wenn sich Gate 3 ändert
-            ("g3", 1.0, 1.0, 1.0, [0.0, 0.0, 0.1]),    # Gate 3 selbst mit Offset
+            ("g3", 1.0, 1.0, 1.0, [0.0, 0.0, 0.0]),    # Gate 3 selbst mit Offset
             ],
 
             "o1": [  # Wenn sich Obstacle 1 ändert  
@@ -192,7 +193,8 @@ class MPController(Controller):
 
 
         self.theta = 0
-        self.v_theta = 1/ (6.5 * self.dt * self.freq) ## from niclas with 6 or 7
+        t= 5.5
+        self.v_theta = 1/ (t * self.dt * self.freq) ## from niclas with 6 or 7
         
         # Automatische Gate-Thetas basierend auf berechneten Indizes
         self.gate_thetas = [ts[i] for i in gate_indices]
@@ -228,10 +230,21 @@ class MPController(Controller):
         # Log state vector every 0.1 seconds
         if self.logger:
             current_time = self._tick / self.freq
+            # nur alle 0.01 s loggen
             if current_time - self._last_log_time >= 0.01:
-                self.logger.log_state(current_time, xcurrent)
+                # Referenzpunkt auf der Trajektorie
+                ref_pt = np.array([
+                    self.cs_x(self.theta),
+                    self.cs_y(self.theta),
+                    self.cs_z(self.theta)
+                ])
+                try:
+                    u1 = self.acados_ocp_solver.get(1, "u")
+                    self.logger.log_state(current_time, xcurrent, u1, ref_point=ref_pt)
+                except:
+                    self.logger.log_state(current_time, xcurrent, ref_point=ref_pt)
                 self._last_log_time = current_time
-        
+                
         
         
         self.acados_ocp_solver.set(0, "lbx", xcurrent)
@@ -305,8 +318,8 @@ class MPController(Controller):
             # print(f"Obs {i}: Position=({ox:6.3f}, {oy:6.3f})  Abstand={d:5.3f} m  Kosten={cost_i:6.3f}")
         # print_output(tick=self._tick, obs=obs, freq=self.config.env.freq)
 
-        #u1 = self.acados_ocp_solver.get(1, "u")
-        # Debugging of  feedback law i.e print u1
+        # u1 = self.acados_ocp_solver.get(1, "u")
+        # # Debugging of  feedback law i.e print u1
         # # print u1
         # input_names = ["df_cmd", "dr_cmd", "dp_cmd", "dy_cmd", "dv_theta_cmd"]
         # for name, value in zip(input_names, u1):
@@ -338,7 +351,7 @@ class MPController(Controller):
         self.last_f_cmd = x1[10]
         self.last_rpy_cmd = x1[11:14]  
 
-        self.v_theta = x1[15] 
+        # self.v_theta = x1[15] 
         self.theta = min(1.0, self.theta + self.v_theta * self.dt)
         #self.theta = x1[14]  # Experimental Update theta directly from the MPC solution
 
@@ -378,17 +391,20 @@ class MPController(Controller):
 
     def episode_callback(self, curr_time: float=None):
         """Callback at the end of each episode.
-        
+
         Args:
             curr_time: Current simulation time.
         """
+        # 1) Log und Close
         if self.logger:
             self.logger.log_final_positions(
                 gates_pos=self._info.get("gates_pos"),
                 obstacles_pos=self._info.get("obstacles_pos")
             )
             self.logger.close()
-        # pass
+
+
+
 
 
 
@@ -584,6 +600,7 @@ class MPController(Controller):
         # Handle Gate Changes
         gates_pos = obs.get("gates_pos", None)
         gates_visited = obs.get("gates_visited", None)
+
         
         if self._last_gates_visited is not None and gates_visited is not None and gates_pos is not None:
             if not np.array_equal(gates_visited, self._last_gates_visited):

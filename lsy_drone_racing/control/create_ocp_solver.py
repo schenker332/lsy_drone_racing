@@ -58,7 +58,7 @@ def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosO
     ### LEARNING: Similar as for gate penalties, too high contouing error can caouse frek instability incidents
     q_c = 70 # contour error weight
     q_l = 60 # lag error weight
-    mu = 0.0008         # progress 0.008      #mu = 0.001 # progress weight ### LEARNING: Progress weight can be really hign and sometimes makes the controller more reliable => 0.6 also worked
+    mu = 0.0004         # progress 0.008      #mu = 0.001 # progress weight ### LEARNING: Progress weight can be really hign and sometimes makes the controller more reliable => 0.6 also worked
     q_min = p[6]  # gaussian weight
     max_v_theta = 0.16  # maximum progress velocity
     dv_theta_max = 0.35  # maximum progress acceleration
@@ -66,7 +66,7 @@ def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosO
 
     # Inputs
     # q_u_vec = DM([0.02, 0.05, 0.05, 0.05, 0.05])      ## OLD more conservartive weights from max
-    q_u_vec = DM([0.06, 0.055, 0.055, 0.055, 0.05 ])  # Gewichtung für df_cmd, dr_cmd, dp_cmd, dy_cmd, dv_theta_cmd
+    q_u_vec = DM([0.08, 0.055, 0.055, 0.055, 0.05 ])  # Gewichtung für df_cmd, dr_cmd, dp_cmd, dy_cmd, dv_theta_cmd
     control_cost = q_u_vec[0] * u[0]**2 + q_u_vec[1] * u[1]**2 + q_u_vec[2] * u[2]**2 + q_u_vec[3] * u[3]**2 + q_u_vec[4] * (u[4]**2)
 
     # Set cost funnction
