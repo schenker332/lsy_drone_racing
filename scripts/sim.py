@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 import fire
 import gymnasium
 from gymnasium.wrappers.jax_to_numpy import JaxToNumpy
+import time
 
 
 

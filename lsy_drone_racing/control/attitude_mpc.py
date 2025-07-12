@@ -272,7 +272,7 @@ class MPController(Controller):
 
 
         self.theta = 0
-        t= 5.5
+        t= 6.6
         self.v_theta = 1/ (t * self.dt * self.freq) ## from niclas with 6 or 7
         
         # Automatische Gate-Thetas basierend auf berechneten Indizes
@@ -417,9 +417,9 @@ class MPController(Controller):
         
         # # print(f"weight: {self.get_weight(min_theta):.2f}")
         # print(f"min_dist: {min_dist:.2f} at theta: {min_theta:.2f}")
-        print(f"Time: {self._tick/self.freq:.2f}s")
+        # print(f"Time: {self._tick/self.freq:.2f}s")
         # print the current drone positions only
-        print(f"Tick {self._tick}: px={x1[0]:.4f}, py={x1[1]:.4f}, pz={x1[2]:.4f}")
+        # print(f"Tick {self._tick}: px={x1[0]:.4f}, py={x1[1]:.4f}, pz={x1[2]:.4f}")
         # print("=" * 20)
 
 
