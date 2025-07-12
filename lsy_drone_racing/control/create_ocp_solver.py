@@ -61,7 +61,7 @@ def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosO
     mu = 0.0004         # progress 0.008      #mu = 0.001 # progress weight ### LEARNING: Progress weight can be really hign and sometimes makes the controller more reliable => 0.6 also worked
     q_min = p[6]  # gaussian weight
     max_v_theta = 0.16  # maximum progress velocity
-    dv_theta_max = 0.35  # maximum progress acceleration
+    dv_theta_max = 0.0035  # maximum progress acceleration
 
 
     # Inputs
