@@ -38,7 +38,7 @@ class MPController(Controller):
 
         # Gate-Positionen
         gates = np.array([
-            [0.55, -0.55, 0.56],  # Gate 0      [0.45, -0.5, 0.56]
+            [0.45, -0.50, 0.56],  # Gate 0      [0.45, -0.5, 0.56]
             [1.0, -1.05, 1.25],   # Gate 1      [1.0, -1.05, 1.11]
             [0.0, 1.0, 0.56],     # Gate 2      [0.0, 1.0, 0.56]
             [-0.5, 0.0, 1.11]     # Gate 3      [-0.5, 0.0, 1.11]
@@ -124,7 +124,7 @@ class MPController(Controller):
         
         self.response_mapping = {
             "g0": [  # Wenn sich Gate 0 ändert
-            ("g0", 1.0, 1.0, 1.0, [0.0, 0.0, 0.0]),  # Gate 0 selbst mit Offset
+            ("g0", 1.3, 1.3, 1.3, [0.075, 0.0, 0.0]),  # Gate 0 selbst mit Offset
             ],
 
             "g1": [  # Wenn sich Gate 1 ändert  
@@ -147,7 +147,7 @@ class MPController(Controller):
             ],
 
             "o3": [  # Wenn sich Obstacle 3 ändert
-            ("b3.2", 1.0, 1.0, 0.0, [0.0, 0.0, 0.0]),  # Block 3, Waypoint 2 (at obstacle 4)
+            ("b3.2", 2.0, 2.0, 0.0, [0.0, 0.0, 0.0]),  # Block 3, Waypoint 2 (at obstacle 4)
             ],
         }
         
@@ -197,8 +197,9 @@ class MPController(Controller):
 
 
         self.theta = 0
-        # t= 4
-        t= 3.7
+        t= 4.5
+        # t= 3.7
+
         self.v_theta = 1/ (t * self.dt * self.freq) ## from niclas with 6 or 7
 
         dx   = self.cs_x.derivative(1)
@@ -222,6 +223,7 @@ class MPController(Controller):
         # Automatische Gate-Thetas basierend auf berechneten Indizes
         self.gate_thetas = [ts[i] for i in gate_indices]
         self.gate_peak_weights = [150, 150, 150, 150] # [40, 80, 60, 140]. //// [140, 140, 140, 140] 
+
 
         # Create the optimal control problem solver
         self.acados_ocp_solver, self.ocp = create_ocp_solver(self.T_HORIZON, self.N)
@@ -286,11 +288,15 @@ class MPController(Controller):
         obs_array = obs["obstacles_pos"]          # shape=(4,3)
         obs_flat = obs_array.reshape(-1)
 
+   
+
         κ = self.curvature(self.theta)
         # z.B. v_theta kleiner machen wenn κ groß:
-        # alpha = 0.2
-        alpha = 0.17
+        alpha = 0.25
+        # alpha = 0.17
         self.v_theta = self.base_v_theta / (1 + alpha * κ)
+
+
 
 
         for j in range(self.N + 1):
@@ -320,29 +326,6 @@ class MPController(Controller):
         ### ============ Debugging ================ ###
         ### ======================================= ###
 
-        # Bestrafungsparameter
-        weight = 40.0   # Gewicht
-        k      = 5.0   # Steilheit
-
-        # Beispiel: obs_flat aus deinem Controller, shape (12,)
-        # Und obs["pos"] aus deinem Sensor-Input, shape (3,)
-        drone_xy = np.array(obs["pos"][:2])        # [px, py]
-        obs_flat  = obs["obstacles_pos"].reshape(-1)  # (12,)
-
-        # Umformen zu (4,3) und nur x,y behalten → (4,2)
-        obs_xy = obs_flat.reshape(-1, 3)[:, :2]     
-
-        # Loop über alle Hindernisse
-        for i, (ox, oy) in enumerate(obs_xy):
-            # Abstand in der xy-Ebene
-            dx = drone_xy[0] - ox
-            dy = drone_xy[1] - oy
-            d  = np.hypot(dx, dy)                  # = sqrt(dx**2 + dy**2)
-
-            # Exponentielle Kosten
-            cost_i = weight * np.exp(-k * d)
-
-            # print(f"Obs {i}: Position=({ox:6.3f}, {oy:6.3f})  Abstand={d:5.3f} m  Kosten={cost_i:6.3f}")
         # print_output(tick=self._tick, obs=obs, freq=self.config.env.freq)
 
         # u1 = self.acados_ocp_solver.get(1, "u")
@@ -377,6 +360,7 @@ class MPController(Controller):
         self.last_f_collective = self.last_f_collective * (1 - w) + x1[9] * w
         self.last_f_cmd = x1[10]
         self.last_rpy_cmd = x1[11:14]  
+
 
         # self.v_theta = x1[15] 
         self.theta = min(1.0, self.theta + self.v_theta * self.dt)
@@ -644,6 +628,8 @@ class MPController(Controller):
                         old_pos = self._last_gates_pos[i] if self._last_gates_pos is not None else gates_pos[i]
                         # Nur response_mapping anwenden, keine automatische Gate-Positionierung
                         self._apply_unified_response(f"g{i}", gates_pos[i], old_pos)
+
+
         
         # Handle Obstacle Changes  
         obstacles_pos = obs.get("obstacles_pos", None)
@@ -652,6 +638,8 @@ class MPController(Controller):
             for i, (old_pos, new_pos) in enumerate(zip(self._last_obstacles_pos, obstacles_pos)):
                 if np.linalg.norm(new_pos - old_pos) > 0.001:
                     self._apply_unified_response(f"o{i}", new_pos, old_pos)
+
+
         
         # Store for next comparison
         self._last_gates_visited = gates_visited.copy() if gates_visited is not None else None
@@ -665,7 +653,7 @@ class MPController(Controller):
             return
         
         delta = new_pos - old_pos
-        trajectory_updated = False
+    
         
         for target, x_factor, y_factor, z_factor, offset in self.response_mapping[trigger_id]:
             
