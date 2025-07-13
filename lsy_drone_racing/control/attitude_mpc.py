@@ -9,6 +9,10 @@ if TYPE_CHECKING:
 from lsy_drone_racing.control.create_ocp_solver import create_ocp_solver
 from lsy_drone_racing.control.helper.print_output import print_output
 from lsy_drone_racing.control.helper.datalogger import DataLogger
+import pathlib
+import subprocess
+import sys
+
 
 
 
@@ -36,7 +40,7 @@ class MPController(Controller):
         gates = np.array([
             [0.55, -0.55, 0.56],  # Gate 0      [0.45, -0.5, 0.56]
             [1.0, -1.05, 1.25],   # Gate 1      [1.0, -1.05, 1.11]
-            [0.1, 1.0, 0.56],     # Gate 2      [0.0, 1.0, 0.56]
+            [0.0, 1.0, 0.56],     # Gate 2      [0.0, 1.0, 0.56]
             [-0.5, 0.0, 1.11]     # Gate 3      [-0.5, 0.0, 1.11]
         ])
         
@@ -164,7 +168,7 @@ class MPController(Controller):
         self._tick = 0
 
         # Toggle logging by setting this flag to True or False
-        self.logging_enabled = False
+        self.logging_enabled = True
         if  self.logging_enabled:
             # Initialize logger
             self.logger = DataLogger(log_dir="logs")
@@ -193,12 +197,31 @@ class MPController(Controller):
 
 
         self.theta = 0
-        t= 5.5
+        # t= 4
+        t= 3.7
         self.v_theta = 1/ (t * self.dt * self.freq) ## from niclas with 6 or 7
+
+        dx   = self.cs_x.derivative(1)
+        ddx  = self.cs_x.derivative(2)
+        dy   = self.cs_y.derivative(1)
+        ddy  = self.cs_y.derivative(2)
+        dz   = self.cs_z.derivative(1)
+        ddz  = self.cs_z.derivative(2)
+
+
+        def curvature(theta):
+            v = np.array([dx(theta), dy(theta), dz(theta)])
+            a = np.array([ddx(theta), ddy(theta), ddz(theta)])
+            num = np.linalg.norm(np.cross(v, a))
+            den = np.linalg.norm(v)**3 + 1e-8
+            return num/den
         
+        self.curvature = curvature    
+        self.base_v_theta = self.v_theta
+
         # Automatische Gate-Thetas basierend auf berechneten Indizes
         self.gate_thetas = [ts[i] for i in gate_indices]
-        self.gate_peak_weights = [100, 80, 60, 100] # [40, 80, 60, 140]. //// [140, 140, 140, 140] 
+        self.gate_peak_weights = [150, 150, 150, 150] # [40, 80, 60, 140]. //// [140, 140, 140, 140] 
 
         # Create the optimal control problem solver
         self.acados_ocp_solver, self.ocp = create_ocp_solver(self.T_HORIZON, self.N)
@@ -263,7 +286,11 @@ class MPController(Controller):
         obs_array = obs["obstacles_pos"]          # shape=(4,3)
         obs_flat = obs_array.reshape(-1)
 
-
+        κ = self.curvature(self.theta)
+        # z.B. v_theta kleiner machen wenn κ groß:
+        # alpha = 0.2
+        alpha = 0.17
+        self.v_theta = self.base_v_theta / (1 + alpha * κ)
 
 
         for j in range(self.N + 1):
@@ -391,17 +418,25 @@ class MPController(Controller):
 
     def episode_callback(self, curr_time: float=None):
         """Callback at the end of each episode.
-
+        
         Args:
             curr_time: Current simulation time.
         """
-        # 1) Log und Close
         if self.logger:
             self.logger.log_final_positions(
                 gates_pos=self._info.get("gates_pos"),
                 obstacles_pos=self._info.get("obstacles_pos")
             )
             self.logger.close()
+        # -------------- Plot erzeugen ---------------------------------
+        try:
+            plot_script = pathlib.Path("plots/plot_speed.py").resolve()   # Pfad anpassen, wenn nötig
+            subprocess.run(
+                [sys.executable, str(plot_script), str(self.logger.run_dir)],
+                check=True
+            )
+        except Exception as e:
+            print(f"[WARN] Speed-Plot konnte nicht erzeugt werden: {e}")
 
 
 
@@ -454,8 +489,8 @@ class MPController(Controller):
         
         # Parameter für die Suche
         search_range = 0.1  # Wie weit zurück suchen (in theta-Einheiten)
-        coarse_samples = 10  # Anzahl grober Samples für erste Suche
-        fine_samples = 20     # Anzahl feiner Samples für die Verfeinerung
+        coarse_samples = 15  # Anzahl grober Samples für erste Suche
+        fine_samples = 50     # Anzahl feiner Samples für die Verfeinerung
         
         # Definiere den Suchbereich (nur nach hinten)
         search_start = max(0.0, current_theta - search_range)
@@ -518,7 +553,7 @@ class MPController(Controller):
         und an jedem Gate auf bis zu gate_peak_weights[i] ansteigt.
         """
         base_weight = 20
-        sigma       = 0.1
+        sigma       = 0.05
 
         w = base_weight
         # Durchlaufe Gates und zugehörige Spitzengewichte
