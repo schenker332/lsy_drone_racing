@@ -197,8 +197,9 @@ class MPController(Controller):
 
 
         self.theta = 0
+        # t= 4.5
+        # t= 3.8
         t= 4.5
-        # t= 3.7
 
         self.v_theta = 1/ (t * self.dt * self.freq) ## from niclas with 6 or 7
 
@@ -222,11 +223,14 @@ class MPController(Controller):
 
         # Automatische Gate-Thetas basierend auf berechneten Indizes
         self.gate_thetas = [ts[i] for i in gate_indices]
-        self.gate_peak_weights = [150, 150, 150, 150] # [40, 80, 60, 140]. //// [140, 140, 140, 140] 
+        self.gate_peak_weights = [2000, 200, 200, 300] # [40, 80, 60, 140]. //// [140, 140, 140, 140] 
 
 
         # Create the optimal control problem solver
         self.acados_ocp_solver, self.ocp = create_ocp_solver(self.T_HORIZON, self.N)
+
+        self.base_weight = 70.0
+        self.sigma       = 0.01      # 5 % der Norm-Skala
 
 
 
@@ -281,7 +285,12 @@ class MPController(Controller):
         ### ============ Set parameters =========== ###
         ### ======================================= ###
 
-        _,_,min_theta = self.compute_min_distance_to_trajectory(obs["pos"])
+        _,_,min_theta = self.compute_min_distance_to_trajectory(obs["pos"], self.theta)
+
+        # print(f"theta: {self.theta:.2f}")
+
+        self.pos = obs["pos"]
+
 
         # update trajectory
         self._handle_unified_update(obs)
@@ -292,26 +301,87 @@ class MPController(Controller):
 
         κ = self.curvature(self.theta)
         # z.B. v_theta kleiner machen wenn κ groß:
-        alpha = 0.25
-        # alpha = 0.17
+        # alpha = 0.25
+        alpha = 0.14
         self.v_theta = self.base_v_theta / (1 + alpha * κ)
 
 
+        # ------------------------------------------------------------
+        # 1. Hole aus dem VORHERIGEN Solve die State-Trajektorie
+        # ------------------------------------------------------------
+        x_pred = [xcurrent]                      # Stage 0 = Ist-Zustand
 
+        
+        try:
+            for j in range(1, self.N + 1):  
+                x_pred.append(self.acados_ocp_solver.get(j, "x"))
+        except RuntimeError:
+            pass
+            print("Warning: Could not retrieve all predicted states from the solver. Using only the initial state.")
+
+        alpha_dist = 25.0              # Steilheit der Exp-Strafe
+
+        stage_pos    = []
+        nearest_pos  = []
+        min_thetas   = []
+        min_dists    = []
+        weights      = []          # NEU
+        cost_pens   = []  
+
+        for j, xj in enumerate(x_pred):
+            p_j        = xj[:3]
+            theta_hint = self.theta + j*self.v_theta*self.dt
+            d_j, p_star, θ_star = self.compute_min_distance_to_trajectory(p_j, theta_hint)
+            w_j = self.weight_from_theta(θ_star)  # NEU
+
+
+
+            cost_pen_j = w_j * (np.exp(alpha_dist * d_j) - 1.0)   # FERTIGER Kostenterm
+            cost_pens.append(cost_pen_j)
+
+            stage_pos.append(p_j)
+            nearest_pos.append(p_star)
+            min_thetas.append(θ_star)
+            min_dists.append(d_j)
+            weights.append(self.weight_from_theta(θ_star))   # **NEU**
+
+
+        #print ersten eintrag von weights
+        # print(f"weights: {weights[0]:.2f} ")
+        
+        # #printe den erste Eintrag von cost_pens
+        # print(f"cost_pen: {cost_pens[0]:.2f} ")
+
+        self._cost_pens   = np.asarray(cost_pens)
+        self._stage_pos   = np.asarray(stage_pos)
+        self._nearest_pos = np.asarray(nearest_pos)
+        self._min_thetas  = np.asarray(min_thetas)
+        self._min_dists   = np.asarray(min_dists)
+        self._weights     = np.asarray(weights)
+
+
+
+
+        # print(self.theta)
 
         for j in range(self.N + 1):
             theta_j = min(self.theta + j * self.v_theta * self.dt, 1.0)
             theta_j_next = min(theta_j + 0.0001, 1.0)
-            theta_min_j = min(min_theta + j * self.v_theta * self.dt, 1.0)
+            # theta_min_j = min(min_theta + j * self.v_theta * self.dt, 1.0)
 
 
             p_ref = np.array([
-            self.cs_x(theta_j), self.cs_y(theta_j), self.cs_z(theta_j), # for contouring
-            self.cs_x(theta_j_next), self.cs_y(theta_j_next), self.cs_z(theta_j_next), #for contouring
-            self.get_weight(theta_min_j),   # for gauss weighting
-            self.cs_x(theta_min_j), self.cs_y(theta_min_j), self.cs_z(theta_min_j) # for real minimun distance
+                self.cs_x(theta_j), self.cs_y(theta_j), self.cs_z(theta_j),  # for contouring
+                self.cs_x(theta_j_next), self.cs_y(theta_j_next), self.cs_z(theta_j_next),  # for contouring
+                # self.weight_from_theta(),  # for gauss weighting
+                # self.cs_x(theta_min_j), self.cs_y(theta_min_j), self.cs_z(theta_min_j) # for real minimun distance
+                self._weights[j],  # for gauss weighting
+                # self._min_thetas[j]
+                # cost_pens[j],  # for cost penalty
+
             ])
-            p_ref = np.concatenate([p_ref, obs_flat])
+
+            # p_ref = np.concatenate([p_ref, obs_flat])
             self.acados_ocp_solver.set(j, "p", p_ref)
 
 
@@ -321,6 +391,8 @@ class MPController(Controller):
         self.acados_ocp_solver.solve()
         x1 = self.acados_ocp_solver.get(1, "x")
 
+        J = self.acados_ocp_solver.get_cost()
+        # print(f"Total cost: {J:.3f}")
 
         ### ======================================= ###
         ### ============ Debugging ================ ###
@@ -457,79 +529,61 @@ class MPController(Controller):
         return np.array(horizon_positions)
 
 
-    def compute_min_distance_to_trajectory(self, drone_pos):
+    def compute_min_distance_to_trajectory(self, drone_pos: np.ndarray,
+                                        theta_hint: float | None = None):
         """
-        Berechnet den minimalen Abstand der Drohne zur Trajektorie,
-        indem nur der Bereich hinter dem aktuellen Theta durchsucht wird.
-        
-        Args:
-            drone_pos: Position der Drohne als np.array([x, y, z])
-            
-        Returns:
-            tuple: (minimaler Abstand, Position des nächsten Punkts)
+        Liefert den minimalen Abstand von `drone_pos` zur Spline-Trajektorie
+        in einem kleinen Fenster um `theta_hint`.
+
+        Args
+        ----
+        drone_pos   : np.ndarray, shape (3,)
+        theta_hint  : geschätztes Bahn-θ, um das gesucht wird.
+                    • None  → verwende self.theta  (Ist-Position)
+                    • sonst → Center des Suchintervalls
+
+        Returns
+        -------
+        min_dist     : float              – minimaler Abstand
+        min_traj_pos : np.ndarray, (3,)   – Punkt p* auf der Trajektorie
+        min_theta    : float              – Parameter θ*, zu dem p* gehört
         """
-        # Aktueller Referenzpunkt als obere Grenze der Suche
-        current_theta = self.theta
-        
-        # Parameter für die Suche
-        search_range = 0.1  # Wie weit zurück suchen (in theta-Einheiten)
-        coarse_samples = 15  # Anzahl grober Samples für erste Suche
-        fine_samples = 50     # Anzahl feiner Samples für die Verfeinerung
-        
-        # Definiere den Suchbereich (nur nach hinten)
-        search_start = max(0.0, current_theta - search_range)
-        search_end = current_theta  # Endet beim aktuellen Punkt
-        
-        # 1. Grobe Suche
-        min_dist = float('inf')
-        min_theta = current_theta
-        
-        # Überspringe die Suche, wenn wir am Anfang der Trajektorie sind
-        if search_start >= search_end:
-            # Berechne Abstand zum Anfangspunkt
-            pos_x = self.cs_x(0)
-            pos_y = self.cs_y(0)
-            pos_z = self.cs_z(0)
-            traj_pos = np.array([pos_x, pos_y, pos_z])
-            return np.linalg.norm(drone_pos - traj_pos), traj_pos, 0
-        
-        # Grobe Abtastung des Suchbereichs
-        theta_values = np.linspace(search_start, search_end, coarse_samples)
-        for theta in theta_values:
-            # Berechne Position auf der Trajektorie
-            pos_x = self.cs_x(theta)
-            pos_y = self.cs_y(theta)
-            pos_z = self.cs_z(theta)
-            traj_pos = np.array([pos_x, pos_y, pos_z])
-            
-            # Berechne Abstand
-            dist = np.linalg.norm(drone_pos - traj_pos)
-            
-            # Aktualisiere Minimum
-            if dist < min_dist:
-                min_dist = dist
-                min_theta = theta
-                min_traj_pos = traj_pos
-        
-        # 2. Feine Suche
-        fine_search_start = max(0.0, min_theta - search_range/coarse_samples)
-        fine_search_end = min(current_theta, min_theta + search_range/coarse_samples)
-        
-        # Feine Abtastung des eingegrenzten Bereichs
-        fine_theta_values = np.linspace(fine_search_start, fine_search_end, fine_samples)
-        for theta in fine_theta_values:
-            pos_x = self.cs_x(theta)
-            pos_y = self.cs_y(theta)
-            pos_z = self.cs_z(theta)
-            traj_pos = np.array([pos_x, pos_y, pos_z])
-            
-            dist = np.linalg.norm(drone_pos - traj_pos)
-            if dist < min_dist:
-                min_dist = dist
-                min_traj_pos = traj_pos
-                min_theta = theta
-        
+        # --- 0) Zentrum des Fensters festlegen ------------------------------
+        if theta_hint is None:
+            theta_hint = self.theta
+
+        # --- 1) Parameter --------------------------------------------
+        half_width     = 0.1      # ±-Fenster (0.05 ≙ 5 % der Spline­länge)
+        coarse_samples = 5
+        fine_samples   = 10
+
+        search_start = max(0.0, theta_hint - half_width)
+        search_end   = min(1.0, theta_hint + half_width)
+
+        # --- 2) Grobe Suche ------------------------------------------
+        min_dist   = np.inf
+        min_theta  = theta_hint
+        min_traj_pos = None
+
+        for θ in np.linspace(search_start, search_end, coarse_samples):
+            p = np.array([self.cs_x(θ), self.cs_y(θ), self.cs_z(θ)])
+            d = np.linalg.norm(drone_pos - p)
+            if d < min_dist:
+                min_dist, min_theta, min_traj_pos = d, θ, p
+
+        # --- 3) Feine Suche um das aktuelle Minimum ------------------
+        δ = half_width / coarse_samples
+        fine_start = max(0.0, min_theta - δ)
+        fine_end   = min(1.0, min_theta + δ)
+
+        for θ in np.linspace(fine_start, fine_end, fine_samples):
+            p = np.array([self.cs_x(θ), self.cs_y(θ), self.cs_z(θ)])
+            d = np.linalg.norm(drone_pos - p)
+            if d < min_dist:
+                min_dist, min_theta, min_traj_pos = d, θ, p
+
         return min_dist, min_traj_pos, min_theta
+
 
     def get_weight(self, theta: float) -> float:
         """
@@ -698,3 +752,13 @@ class MPController(Controller):
             new_traj = np.column_stack((self.cs_x(vis_s), self.cs_y(vis_s), self.cs_z(vis_s)))
             self._trajectory_history.append(new_traj.copy())
 
+    def get_stage_vs_nearest(self):
+        return self._stage_pos, self._nearest_pos
+
+
+    def weight_from_theta(self, theta: float) -> float:
+        w = self.base_weight
+        for θ_g, peak in zip(self.gate_thetas, self.gate_peak_weights):
+            diff  = (theta - θ_g) / self.sigma
+            w     = max(w, self.base_weight + (peak - self.base_weight)*np.exp(-0.5*diff*diff))
+        return w

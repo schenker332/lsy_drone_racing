@@ -137,9 +137,9 @@ class SimVisualizer:
 
 
         
-        # Draw line and point for minimum trajectory position
-        draw_line(env, np.vstack([drone_pos, min_traj_pos]), rgba=np.array([1.0, 0.5, 0.0, 1.0]), min_size=2.0, max_size=2.0)
-        draw_point(env, min_traj_pos, size=0.01, rgba=np.array([1.0, 0.5, 0.0, 0.8]))
+        # # Draw line and point for minimum trajectory position
+        # draw_line(env, np.vstack([drone_pos, min_traj_pos]), rgba=np.array([1.0, 0.5, 0.0, 1.0]), min_size=2.0, max_size=2.0)
+        # draw_point(env, min_traj_pos, size=0.01, rgba=np.array([1.0, 0.5, 0.0, 0.8]))
 
         
 
@@ -157,3 +157,11 @@ class SimVisualizer:
         for gate_idx in gate_indices:
             if gate_idx < len(waypoints):
                 draw_point(env, waypoints[gate_idx], size=0.03, rgba=np.array([1.0, 0.0, 0.0, 0.9]))  # Red
+
+        stage, near = controller.get_stage_vs_nearest()
+        for p, q in zip(stage, near):   # alle Schritte zeigen
+            draw_line(env, np.vstack((p,q)),
+                    rgba=np.array([1,0.5,0,0.6]), min_size=1.5, max_size=1.5)
+            draw_point(env, p, size=0.012, rgba=np.array([0,0.5,1,0.8]))
+            draw_point(env, q, size=0.012, rgba=np.array([1,0.5,0,0.8]))
+

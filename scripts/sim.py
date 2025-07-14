@@ -100,7 +100,7 @@ def simulate(
                 # Update the controller internal state and models.
                 controller_finished = controller.step_callback(action, obs, reward, terminated, truncated, info)
                 # Update and visualize the simulation
-                visualizer.update_visualization(env, obs, controller)
+                # visualizer.update_visualization(env, obs, controller)
 
                 if config.sim.gui:
                     env.render()

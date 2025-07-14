@@ -4,7 +4,7 @@ import numpy as np
 from acados_template import AcadosOcp, AcadosOcpSolver
 from lsy_drone_racing.control.export_quadrotor_ode_model import export_quadrotor_ode_model
 from lsy_drone_racing.control.helper.costfunction import contour_and_lag_error, get_min_distance_to_trajectory, get_exponential_obstacle_cost
-from casadi import DM, sum1
+from casadi import DM, sum1, exp
 
 
 def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosOcpSolver, AcadosOcp]:
@@ -42,12 +42,12 @@ def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosO
     ocp.cost.cost_type_e = 'EXTERNAL'
 
     e_c, e_l= contour_and_lag_error(ocp.model)
-    min_distance = get_min_distance_to_trajectory(ocp.model)  # Get minimum distance to trajectory
+    # min_distance = get_min_distance_to_trajectory(ocp.model)  # Get minimum distance to trajectory
 
-    obstacle_cost = get_exponential_obstacle_cost(ocp.model,
-                                  num_obstacles=4,
-                                  weight=90.0,   
-                                  k=0.2)
+    # obstacle_cost = get_exponential_obstacle_cost(ocp.model,
+                                #   num_obstacles=4,
+                                #   weight=90.0,   
+                                #   k=0.2)
 
     # Parameters Niclas
     # q_c = 60 # contour error weight
@@ -56,24 +56,28 @@ def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosO
 
 
     ### LEARNING: Similar as for gate penalties, too high contouing error can caouse frek instability incidents
-    q_c = 70 # contour error weight
+    q_c = 90 # contour error weight
     q_l = 60 # lag error weight
     mu = 0.0004         # progress 0.008      #mu = 0.001 # progress weight ### LEARNING: Progress weight can be really hign and sometimes makes the controller more reliable => 0.6 also worked
-    q_min = p[6]  # gaussian weight
+    # q_min = p[6]  # gaussian weight
     max_v_theta = 0.16  # maximum progress velocity
     dv_theta_max = 0.35  # maximum progress acceleration
 
+    # weight = p[6]  # Set progress weight in parameters
+    # min_distance = p[7]  # Set minimum distance in parameters
+    cost = p[6]  # Set cost penalty in parameters
 
     # Inputs
     # q_u_vec = DM([0.02, 0.05, 0.05, 0.05, 0.05])      ## OLD more conservartive weights from max
     q_u_vec = DM([0.06, 0.055, 0.055, 0.055, 0.05 ])  # Gewichtung für df_cmd, dr_cmd, dp_cmd, dy_cmd, dv_theta_cmd
     control_cost = q_u_vec[0] * u[0]**2 + q_u_vec[1] * u[1]**2 + q_u_vec[2] * u[2]**2 + q_u_vec[3] * u[3]**2 + q_u_vec[4] * (u[4]**2)
 
+    alpha = 100.0
     # Set cost funnction
     ### LEARNING: Progress v_theta quadratic brings huge stabilisation
-    ocp.model.cost_expr_ext_cost    = q_c * e_c**2 + q_l * e_l**2     + q_min * min_distance**3    + control_cost    
-    ocp.model.cost_expr_ext_cost_e  = q_c * e_c**2 + q_l * e_l**2      + q_min * min_distance**3   
-	
+    ocp.model.cost_expr_ext_cost    = cost * e_c**2 + q_l * e_l**2   + control_cost   #  + q_min * min_distance**3     
+    ocp.model.cost_expr_ext_cost_e  = cost * e_c**2 + q_l * e_l**2   # + q_min * min_distance**3
+
     #min_distance**3
     #min_distance**3
 
