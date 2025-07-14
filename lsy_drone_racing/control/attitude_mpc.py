@@ -177,8 +177,8 @@ class MPController(Controller):
             self.logger = None
 
         # MPC parameters
-        self.N = 40                    # Number of discretization steps
-        self.T_HORIZON = 1.5           # Time horizon in seconds
+        self.N = 20                   # Number of discretization steps
+        self.T_HORIZON = 0.6           # Time horizon in seconds
         self.dt = self.T_HORIZON / self.N  # Step size
 
         # Initialize state variables    
@@ -198,8 +198,8 @@ class MPController(Controller):
 
         self.theta = 0
         # t= 4.5
-        # t= 3.8
-        t= 4.5
+        t= 4.7
+        # t= 4.5
 
         self.v_theta = 1/ (t * self.dt * self.freq) ## from niclas with 6 or 7
 
@@ -223,13 +223,13 @@ class MPController(Controller):
 
         # Automatische Gate-Thetas basierend auf berechneten Indizes
         self.gate_thetas = [ts[i] for i in gate_indices]
-        self.gate_peak_weights = [2000, 200, 200, 300] # [40, 80, 60, 140]. //// [140, 140, 140, 140] 
+        self.gate_peak_weights = [200, 200, 200, 300] # [40, 80, 60, 140]. //// [140, 140, 140, 140] 
 
 
         # Create the optimal control problem solver
         self.acados_ocp_solver, self.ocp = create_ocp_solver(self.T_HORIZON, self.N)
 
-        self.base_weight = 70.0
+        self.base_weight = 130.0
         self.sigma       = 0.01      # 5 % der Norm-Skala
 
 
@@ -302,7 +302,7 @@ class MPController(Controller):
         κ = self.curvature(self.theta)
         # z.B. v_theta kleiner machen wenn κ groß:
         # alpha = 0.25
-        alpha = 0.14
+        alpha = 0.12
         self.v_theta = self.base_v_theta / (1 + alpha * κ)
 
 
@@ -329,21 +329,21 @@ class MPController(Controller):
         cost_pens   = []  
 
         for j, xj in enumerate(x_pred):
-            p_j        = xj[:3]
+            # p_j        = xj[:3]
             theta_hint = self.theta + j*self.v_theta*self.dt
-            d_j, p_star, θ_star = self.compute_min_distance_to_trajectory(p_j, theta_hint)
-            w_j = self.weight_from_theta(θ_star)  # NEU
+            # d_j, p_star, θ_star = self.compute_min_distance_to_trajectory(p_j, theta_hint)
+            # w_j = self.weight_from_theta(θ_star)  # NEU
 
 
 
-            cost_pen_j = w_j * (np.exp(alpha_dist * d_j) - 1.0)   # FERTIGER Kostenterm
-            cost_pens.append(cost_pen_j)
+            # cost_pen_j = w_j * (np.exp(alpha_dist * d_j) - 1.0)   # FERTIGER Kostenterm
+            # cost_pens.append(cost_pen_j)
 
-            stage_pos.append(p_j)
-            nearest_pos.append(p_star)
-            min_thetas.append(θ_star)
-            min_dists.append(d_j)
-            weights.append(self.weight_from_theta(θ_star))   # **NEU**
+            # stage_pos.append(p_j)
+            # nearest_pos.append(p_star)
+            # min_thetas.append(θ_star)
+            # min_dists.append(d_j)
+            weights.append(self.weight_from_theta(theta_hint))   # **NEU**
 
 
         #print ersten eintrag von weights
@@ -438,8 +438,10 @@ class MPController(Controller):
         self.theta = min(1.0, self.theta + self.v_theta * self.dt)
         #self.theta = x1[14]  # Experimental Update theta directly from the MPC solution
 
-        cmd = x1[10:14]
-        
+        cmd = x1[10:14].copy()
+        # cmd[0] *= 0.75 #für 0.25
+        cmd[0] *= 1 
+
         return cmd
 
 
