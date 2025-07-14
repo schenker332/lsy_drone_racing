@@ -21,6 +21,7 @@ class SimVisualizer:
         self.last_obstacles_positions = {}
         self.obstacle_update_points = []
 
+
     def reset_episode(self):
         """Reset tracking variables for a new episode."""
         self.flown_positions = []
@@ -29,6 +30,7 @@ class SimVisualizer:
         self.last_obstacles_positions = {}
         self.obstacle_update_points = []
 
+ 
 
     def update_visualization(self, env, obs, controller):
         """Update data and visualize the simulation.
@@ -38,7 +40,7 @@ class SimVisualizer:
             obs: Current observation
             controller: The drone controller
         """
-        from lsy_drone_racing.utils import  draw_gates, draw_point, draw_obstacles,draw_line
+        from lsy_drone_racing.utils import  draw_gates, draw_point, draw_obstacles, draw_line, visualize_cost_weights
         
         # Record current drone position (ground truth state)
         drone_pos = obs["pos"]
@@ -76,7 +78,8 @@ class SimVisualizer:
         if prediction_horizon_points is not None and len(prediction_horizon_points) >= 2:
             draw_line(env, prediction_horizon_points, rgba=np.array([0.0, 0.8, 1.0, 1.0]), min_size=2.5, max_size=2.5)
 
-
+        # --- NEW: Visualize cost weights ---
+        visualize_cost_weights(env, controller)
 
         # Draw gates
         if "gates_pos" in obs and "gates_quat" in obs:

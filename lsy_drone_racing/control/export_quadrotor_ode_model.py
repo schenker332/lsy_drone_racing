@@ -1,86 +1,68 @@
 from __future__ import annotations
-from acados_template import AcadosModel
-from casadi import  cos, sin, vertcat, SX
 
-def export_quadrotor_ode_model():
-    """Create and export a quadrotor ODE model for use with acados.
-    
+from acados_template import AcadosModel
+from casadi import SX, cos, sin, vertcat
+
+
+def export_quadrotor_ode_model() -> AcadosModel:
+    """Creates and exports a quadrotor ODE model for use with acados.
+
     This function defines the quadrotor dynamics model including position,
-    velocity, orientation, thrust and control inputs for the MPC controller.
-    
+    velocity, orientation, thrust, and control inputs for the MPC controller.
+    The model uses a state-space representation with states, controls, and parameters
+    that are essential for the Optimal Control Problem (OCP).
+
     Returns:
-        AcadosModel: Model object containing the system dynamics and properties.
+        AcadosModel: An AcadosModel object containing the system dynamics and properties.
     """
     model_name = "lsy_example_mpc"
 
-    # Physical parameters
-    GRAVITY = 9.81 # m/s^2, gravitational acceleration
+    # Physical parameters of the quadrotor
+    GRAVITY = 9.81  # Gravitational acceleration in m/s^2
+    # Empirically identified parameters for the drone's dynamics
     params_pitch_rate = [-6.003842038081178, 6.213752925707588]
     params_roll_rate = [-3.960889336015948, 4.078293254657104]
     params_yaw_rate = [-0.005347588299390372, 0.0]
     params_acc = [20.907574256269616, 3.653687545690674]
-    
-    # state
-    px = SX.sym("px") #0
-    py = SX.sym("py") #1
-    pz = SX.sym("pz") #2
-    vx = SX.sym("vx") #3
-    vy = SX.sym("vy") #4
-    vz = SX.sym("vz") #5
-    roll = SX.sym("r") #6
-    pitch = SX.sym("p") #7
-    yaw = SX.sym("y") #8
-    f_collective = SX.sym("f_collective") #9
-    f_collective_cmd = SX.sym("f_collective_cmd") #10
-    r_cmd = SX.sym("r_cmd") #11
-    p_cmd = SX.sym("p_cmd") #12
-    y_cmd = SX.sym("y_cmd") #13
-    theta = SX.sym("theta") #14
-    v_theta = SX.sym("v_theta") #15
 
-    # input
-    df_cmd = SX.sym("df_cmd")
-    dr_cmd = SX.sym("dr_cmd")
-    dp_cmd = SX.sym("dp_cmd")
-    dy_cmd = SX.sym("dy_cmd")
-    dv_theta_cmd = SX.sym("dv_theta_cmd") 
+    # --- Define State Variables ---
+    # These variables represent the internal state of the drone at any time.
+    px = SX.sym("px")  # Position x
+    py = SX.sym("py")  # Position y
+    pz = SX.sym("pz")  # Position z
+    vx = SX.sym("vx")  # Velocity x
+    vy = SX.sym("vy")  # Velocity y
+    vz = SX.sym("vz")  # Velocity z
+    roll = SX.sym("r")  # Roll angle
+    pitch = SX.sym("p")  # Pitch angle
+    yaw = SX.sym("y")  # Yaw angle
+    f_collective = SX.sym("f_collective")  # Collective thrust
+    f_collective_cmd = SX.sym("f_collective_cmd")  # Commanded collective thrust
+    r_cmd = SX.sym("r_cmd")  # Commanded roll rate
+    p_cmd = SX.sym("p_cmd")  # Commanded pitch rate
+    y_cmd = SX.sym("y_cmd")  # Commanded yaw rate
+    theta = SX.sym("theta")  # Progress along the reference trajectory
+    v_theta = SX.sym("v_theta")  # Rate of progress along the trajectory
 
-    # parameter
-    x_ref = SX.sym("x_ref") #0
-    y_ref = SX.sym("y_ref") #1
-    z_ref = SX.sym("z_ref") #2
-    x_ref_next = SX.sym("x_ref_next") #3
-    y_ref_next = SX.sym("y_ref_next") #4
-    z_ref_next = SX.sym("z_ref_next") #5
-    # weight = SX.sym("weight")  # Weight for minimum distance to trajectory #6
-    # x_ref_min = SX.sym("x_ref_min") #7
-    # y_ref_min = SX.sym("y_ref_min") #8
-    # z_ref_min = SX.sym("z_ref_min") #9
-    # min_distance = SX.sym("min_distance") #7
-    cost = SX.sym("cost")  # Cost for minimum distance to trajectory #6
-    # x_obstacles_pos1 = SX.sym("x_obstacles_pos1") #10
-    # y_obstacles_pos1 = SX.sym("y_obstacles_pos1") #11
-    # z_obstacles_pos1 = SX.sym("z_obstacles_pos1") #12
-    # x_obstacles_pos2 = SX.sym("x_obstacles_pos2") #13
-    # y_obstacles_pos2 = SX.sym("y_obstacles_pos2") #14
-    # z_obstacles_pos2 = SX.sym("z_obstacles_pos2") #15
-    # x_obstacles_pos3 = SX.sym("x_obstacles_pos3") #16
-    # y_obstacles_pos3 = SX.sym("y_obstacles_pos3") #17
-    # z_obstacles_pos3 = SX.sym("z_obstacles_pos3") #18
-    # x_obstacles_pos4 = SX.sym("x_obstacles_pos4") #19
-    # y_obstacles_pos4 = SX.sym("y_obstacles_pos4") #20
-    # z_obstacles_pos4 = SX.sym("z_obstacles_pos4") #21
+    # --- Define Control Inputs ---
+    # These are the variables that the MPC solver can manipulate.
+    df_cmd = SX.sym("df_cmd")  # Change in commanded collective thrust
+    dr_cmd = SX.sym("dr_cmd")  # Change in commanded roll rate
+    dp_cmd = SX.sym("dp_cmd")  # Change in commanded pitch rate
+    dy_cmd = SX.sym("dy_cmd")  # Change in commanded yaw rate
+    dv_theta_cmd = SX.sym("dv_theta_cmd")  # Change in trajectory progress rate
 
-    # Create a vector for the obstacle positions
-    # obstacles_pos = vertcat(
-    #     x_obstacles_pos1, y_obstacles_pos1, z_obstacles_pos1,
-    #     x_obstacles_pos2, y_obstacles_pos2, z_obstacles_pos2,
-    #     x_obstacles_pos3, y_obstacles_pos3, z_obstacles_pos3,
-    #     x_obstacles_pos4, y_obstacles_pos4, z_obstacles_pos4
-    # )
+    # --- Define Online Parameters ---
+    # These parameters are updated at each MPC step to provide new references or weights.
+    x_ref = SX.sym("x_ref")  # Current x-coordinate of the reference trajectory
+    y_ref = SX.sym("y_ref")  # Current y-coordinate of the reference trajectory
+    z_ref = SX.sym("z_ref")  # Current z-coordinate of the reference trajectory
+    x_ref_next = SX.sym("x_ref_next")  # Next x-coordinate for tangent calculation
+    y_ref_next = SX.sym("y_ref_next")  # Next y-coordinate for tangent calculation
+    z_ref_next = SX.sym("z_ref_next")  # Next z-coordinate for tangent calculation
+    cost = SX.sym("cost")  # Weight for the contouring error cost
 
-
-    # State and input vectors
+    # --- State and Control Vectors ---
     states = vertcat(
         px, py, pz, # 0 , 1, 2
         vx, vy, vz, # 3, 4, 5
@@ -112,7 +94,7 @@ def export_quadrotor_ode_model():
         params_roll_rate[0] * roll + params_roll_rate[1] * r_cmd,
         params_pitch_rate[0] * pitch + params_pitch_rate[1] * p_cmd,
         params_yaw_rate[0] * yaw + params_yaw_rate[1] * y_cmd,
-        10.0 * (f_collective_cmd - f_collective),
+        10.0 * (f_collective_cmd - f_collective),  # Thrust dynamics
         df_cmd,
         dr_cmd,
         dp_cmd,
@@ -121,10 +103,7 @@ def export_quadrotor_ode_model():
         dv_theta_cmd,  # v_theta_dot = dv_theta_cmd
     )
 
-
-
-    
-    # Create the AcadosModel
+    # --- Create the AcadosModel ---
     model = AcadosModel()
     model.f_expl_expr = f_expl
     model.x = states

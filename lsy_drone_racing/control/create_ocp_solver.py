@@ -1,86 +1,83 @@
-
 from __future__ import annotations
+
 import numpy as np
 from acados_template import AcadosOcp, AcadosOcpSolver
+from casadi import DM
+
 from lsy_drone_racing.control.export_quadrotor_ode_model import export_quadrotor_ode_model
-from lsy_drone_racing.control.helper.costfunction import contour_and_lag_error, get_min_distance_to_trajectory, get_exponential_obstacle_cost
+from lsy_drone_racing.control.helper.costfunction import contour_and_lag_error, get_min_distance_to_trajectory
 from casadi import DM, sum1, exp
 
 
 def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosOcpSolver, AcadosOcp]:
-    """Create an optimal control problem solver for the quadrotor MPC.
-    
-    Args:
-        Tf: Time horizon in seconds.
-        N: Number of discretization steps.
-        verbose: Whether to print solver information.
-        
-    Returns:
-        tuple: (solver, ocp) containing the acados solver and OCP object.
-    """
+    """Create an Optimal Control Problem (OCP) solver for the quadrotor MPC.
 
+    This function sets up the OCP with the quadrotor's dynamic model,
+    cost function, and constraints. It then creates an Acados solver
+    instance that can be used for real-time control.
+
+    Args:
+        Tf: The time horizon in seconds for the MPC.
+        N: The number of discretization steps over the time horizon.
+        verbose: If True, prints solver information during creation.
+
+    Returns:
+        A tuple containing the AcadosOcpSolver instance and the AcadosOcp object.
+    """
     ocp = AcadosOcp()
-    
-    # Set up the dynamic model
+
+    # Set up the dynamic model from the exported model file
     ocp.model = export_quadrotor_ode_model()
     ocp.json_file = f"{ocp.model.name}.json"
 
-    ocp.solver_options.N_horizon = N 
+    # Set the prediction horizon
+    ocp.solver_options.N_horizon = N
 
-    # Get dimensions 
+    # Get dimensions of the model
     nx = ocp.model.x.size()[0]  # State dimension
     np_ = ocp.model.p.size()[0]  # Parameter dimension
 
+    # Extract symbolic variables for easier access
     p = ocp.model.p
     u = ocp.model.u
-    x = ocp.model.x
 
-    ### ========================================= ###
-    ### ============ Cost function ============== ###
-    ### ========================================= ###
-    ocp.cost.cost_type = 'EXTERNAL'
-    ocp.cost.cost_type_e = 'EXTERNAL'
+    # --- Cost Function ---
+    # The cost is defined as an external cost, allowing for a more complex function
+    ocp.cost.cost_type = "EXTERNAL"
+    ocp.cost.cost_type_e = "EXTERNAL"  # Terminal cost
 
-    e_c, e_l= contour_and_lag_error(ocp.model)
-    # min_distance = get_min_distance_to_trajectory(ocp.model)  # Get minimum distance to trajectory
+    # Decompose the tracking error into contouring and lag errors
+    e_c, e_l = contour_and_lag_error(ocp.model)
 
-    # obstacle_cost = get_exponential_obstacle_cost(ocp.model,
-                                #   num_obstacles=4,
-                                #   weight=90.0,   
-                                #   k=0.2)
+    # --- Cost Function Weights ---
 
-    # Parameters Niclas
-    # q_c = 60 # contour error weight
-    # q_l = 40 # lag error weight
-    # mu = 0.002 # progress weight
-
-
-    ### LEARNING: Similar as for gate penalties, too high contouing error can caouse frek instability incidents
     q_c = 90 # contour error weight
-    q_l = 60 # lag error weight
-    mu = 0.0004         # progress 0.008      #mu = 0.001 # progress weight ### LEARNING: Progress weight can be really hign and sometimes makes the controller more reliable => 0.6 also worked
+    mu = 0.0004 # progress weight 0.008  ### LEARNING: Progress weight can be really high and sometimes makes the controller more reliable => 0.6 also worked
     # q_min = p[6]  # gaussian weight
-    max_v_theta = 0.16  # maximum progress velocity
-    dv_theta_max = 0.35  # maximum progress acceleration
+    # Weight for the contouring error (staying on the path)
+    q_l = 60.0  # Weight for the lag error (progress along the path)
 
-    # weight = p[6]  # Set progress weight in parameters
-    # min_distance = p[7]  # Set minimum distance in parameters
-    cost = p[6]  # Set cost penalty in parameters
+    # The contouring error weight is set as an online parameter in the model/controller
+    theta_spec_cont_weight = p[6]
+    theta_spec_cont_weight
 
-    # Inputs
-    # q_u_vec = DM([0.02, 0.05, 0.05, 0.05, 0.05])      ## OLD more conservartive weights from max
-    q_u_vec = DM([0.06, 0.055, 0.055, 0.055, 0.05 ])  # Gewichtung für df_cmd, dr_cmd, dp_cmd, dy_cmd, dv_theta_cmd
-    control_cost = q_u_vec[0] * u[0]**2 + q_u_vec[1] * u[1]**2 + q_u_vec[2] * u[2]**2 + q_u_vec[3] * u[3]**2 + q_u_vec[4] * (u[4]**2)
+    # --- Control Input Cost ---
+    # Weights for the control inputs to penalize excessive commands
+    q_u_vec = DM([0.06, 0.055, 0.055, 0.055, 0.05])  # df_cmd, dr_cmd, dp_cmd, dy_cmd, dv_theta_cmd
+    control_cost = (
+        q_u_vec[0] * u[0] ** 2
+        + q_u_vec[1] * u[1] ** 2
+        + q_u_vec[2] * u[2] ** 2
+        + q_u_vec[3] * u[3] ** 2
+        + q_u_vec[4] * u[4] ** 2
+    )
 
-    alpha = 100.0
-    # Set cost funnction
+     # --- Total Cost Expression ---
+    # The total cost is a sum of contouring error, lag error, and control input costs.
+    # A quadratic cost on v_theta helps stabilize the progress along the trajectory.
     ### LEARNING: Progress v_theta quadratic brings huge stabilisation
-    ocp.model.cost_expr_ext_cost    = cost * e_c**2 + q_l * e_l**2   + control_cost   #  + q_min * min_distance**3     
-    ocp.model.cost_expr_ext_cost_e  = cost * e_c**2 + q_l * e_l**2   # + q_min * min_distance**3
-
-    #min_distance**3
-    #min_distance**3
-
+    ocp.model.cost_expr_ext_cost    = theta_spec_cont_weight * e_c**2 + q_l * e_l**2  + control_cost      
+    ocp.model.cost_expr_ext_cost_e  = theta_spec_cont_weight * e_c**2 + q_l * e_l**2   
 
 
     ### ========================================= ###
@@ -89,33 +86,33 @@ def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosO
     ocp.constraints.x0 = np.zeros(nx)
     ocp.parameter_values = np.zeros(np_)
 
-    ### Option: also limit state 14 between 0 and 1 but that should not be needed (from v5 branch)
-    ocp.constraints.lbx = np.array([0.1, 0.1, -1, -0.9, -1.57, -max_v_theta])
-    ocp.constraints.ubx = np.array([0.55, 0.55, 1, 0.9, 1.57, max_v_theta])
-    ocp.constraints.idxbx = np.array([9, 10, 11, 12, 13, 15])
+    # State constraints (box constraints on specific states)
+    # ### USE if progress penslization is in use AGAIN ###
+    # max_v_theta = 0.16  # Maximum progress velocity
+    ocp.constraints.lbx = np.array([0.1, 0.1, -1, -0.9, -1.57])
+    ocp.constraints.ubx = np.array([0.55, 0.55, 1, 0.9, 1.57])
+    ocp.constraints.idxbx = np.array([9, 10, 11, 12, 13])  # Indices of constrained states
 
-    # add a limit for the progress acceleration dv_theta_cmd -new from max
-    ocp.constraints.lbu = np.array([-dv_theta_max])
-    ocp.constraints.ubu = np.array([dv_theta_max])
-    ocp.constraints.idxbu = np.array([4])  # position of dvtheta_cmd in input vector
-   
+    # ### UNCOMENT if progress penslization is in use AGAIN ###
+    # # Input constraints (box constraints on specific inputs)
+    # dv_theta_max = 0.35  # Maximum progress acceleration
+    # ocp.constraints.lbu = np.array([-dv_theta_max])
+    # ocp.constraints.ubu = np.array([dv_theta_max])
+    # ocp.constraints.idxbu = np.array([4])  # Index of dv_theta_cmd in the control input vector
 
     ### ========================================== ###
-    ### ============ Dynamics ==================== ###
+    ### ============ Solver options ============== ###
     ### ========================================== ###
     ocp.solver_options.qp_solver = "PARTIAL_CONDENSING_HPIPM" # FULL_CONDENSING_HPIPM
-    ocp.solver_options.hessian_approx = "GAUSS_NEWTON"  # GAUSqcS_NEWTON
+    ocp.solver_options.hessian_approx = "GAUSS_NEWTON"  
     ocp.solver_options.integrator_type = "ERK"
-    ocp.solver_options.nlp_solver_type = "SQP_RTI"  # SQP_RTI
+    ocp.solver_options.nlp_solver_type = "SQP_RTI"
     ocp.solver_options.tf = Tf
     ocp.solver_options.qp_solver_warm_start = 1
     ocp.solver_options.qp_solver_cond_N = N
     ocp.solver_options.qp_solver_iter_max = 50
-    ocp.solver_options.nlp_solver_max_iter = 50 
-    # ocp.solver_options.tol = 1e-3    
-    # ocp.solver_options.nlp_solver_ext_qp_res = 1
-    # ocp.solver_options.regularize_method  = "CONVEXIFY"
-    # ocp.solver_options.globalization_line_search_use_sufficient_descent = 1
+    ocp.solver_options.nlp_solver_max_iter = 50
 
+    # Create the solver instance
     solver = AcadosOcpSolver(ocp, json_file=ocp.json_file, verbose=verbose)
     return solver, ocp

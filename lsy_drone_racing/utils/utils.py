@@ -401,7 +401,8 @@ def draw_tube_lines(env: Any, trajectory: np.ndarray, radius: float = 0.3, num_l
     """
     Draws a set of parallel lines around a given trajectory segment to create a tube-like appearance.
     This can be used to visualize constraints or safe flight corridors around a trajectory.
-    
+    It additionally generates a sphere over the first segment to indicate the relative value of the maximal cost relative a cost of to 150.
+
     Args:
         env: Simulation environment with rendering capabilities.
         trajectory: The main trajectory (e.g., prediction horizon) as np.ndarray of shape (N, 3).
@@ -412,3 +413,146 @@ def draw_tube_lines(env: Any, trajectory: np.ndarray, radius: float = 0.3, num_l
     lines = generate_parallel_lines(trajectory, radius=radius, num_lines=num_lines)
     for line in lines:
         draw_line(env, line, rgba=np.array([1.0, 1.0, 0.0, 0.4]), min_size=1.0, max_size=1.0)
+
+
+def visualize_cost_weights(env, controller):
+    """Visualize cost weights as orthogonal bars along the trajectory.
+    
+    This function draws bars perpendicular to the trajectory at the MPC horizon stages,
+    with bar length proportional to the cost weight at that position. This shows
+    the actual weights used by the MPC at each stage of the prediction horizon.
+    
+    Args:
+        env: The simulation environment for drawing
+        controller: The MPC controller containing the trajectory and weight functions
+    """
+    # --- Configuration ---
+    gate_width = 0.4  # Reference width for normalization (gate opening is 0.4m)
+    bar_thickness = 3.0  # Line thickness for the bars
+    min_bar_length = 0.05  # Minimum bar length for visibility
+    
+    # --- Get MPC horizon data ---
+    N = controller.N  # Number of stages in the horizon
+    dt = controller.dt  # Time step
+    current_theta = controller.theta
+    v_theta = controller.v_theta
+    
+    # --- Collect weights from the actual MPC horizon ---
+    horizon_thetas = []
+    horizon_weights = []
+    
+    for j in range(N + 1):  # Same loop as in compute_control
+        # Compute the theta value for the current stage (same as in MPC)
+        theta_j = min(current_theta + j * v_theta * dt, 1.0)
+        weight_j = controller.weight_for_theta(theta_j)
+        
+        horizon_thetas.append(theta_j)
+        horizon_weights.append(weight_j)
+    
+    # Convert to numpy arrays for easier processing
+    horizon_thetas = np.array(horizon_thetas)
+    horizon_weights = np.array(horizon_weights)
+    
+    # --- Normalize weights ---
+    max_weight = np.max(horizon_weights)
+    min_weight = np.min(horizon_weights)
+    
+    # # Debug output
+    # print(f"MPC Horizon Weights: min={min_weight:.3f}, max={max_weight:.3f}, stages={len(horizon_weights)}")
+    
+    # Avoid division by zero
+    if max_weight == min_weight:
+        max_weight = min_weight + 1
+    
+    # --- Draw bars at each MPC stage ---
+    bars_drawn = 0
+    for j, (theta, weight) in enumerate(zip(horizon_thetas, horizon_weights)):
+        # Get reference point on trajectory
+        ref_point = np.array([
+            controller.cs_x(theta), 
+            controller.cs_y(theta), 
+            controller.cs_z(theta)
+        ])
+        
+        # Calculate tangent vector
+        theta_next = min(theta + 0.001, 1.0)
+        next_point = np.array([
+            controller.cs_x(theta_next),
+            controller.cs_y(theta_next), 
+            controller.cs_z(theta_next)
+        ])
+        
+        tangent = next_point - ref_point
+        tangent_norm = np.linalg.norm(tangent)
+        
+        # Skip if tangent is too small
+        if tangent_norm < 1e-10:
+            continue
+            
+        t_hat = tangent / tangent_norm
+        
+        # Find orthogonal vector (perpendicular to trajectory)
+        if abs(t_hat[2]) < 0.9:
+            ortho = np.cross(t_hat, np.array([0, 0, 1]))
+        else:
+            ortho = np.cross(t_hat, np.array([0, 1, 0]))
+        
+        ortho_norm = np.linalg.norm(ortho)
+        if ortho_norm < 1e-10:
+            continue
+            
+        ortho = ortho / ortho_norm
+        
+        # Normalize weight to bar length
+        normalized_weight = (weight - min_weight) / (max_weight - min_weight)
+        bar_length = max(min_bar_length, normalized_weight * gate_width)
+        
+        # Calculate bar endpoints (centered on trajectory)
+        half_length = bar_length / 2
+        p1 = ref_point - half_length * ortho
+        p2 = ref_point + half_length * ortho
+        
+        # Skip if points are too close
+        if np.linalg.norm(p2 - p1) < 1e-8:
+            continue
+        
+        # Enhanced color mapping based on stage and weight
+        if j == 0:  # Current stage - special color
+            rgba = np.array([1.0, 1.0, 0.0, 0.9])  # Yellow for current position
+        else:
+            # Color mapping: red for high weights, blue for low weights
+            color_intensity = normalized_weight
+            rgba = np.array([
+                color_intensity,      # Red component
+                0.1,                  # Green component (low for contrast)
+                1.0 - color_intensity, # Blue component (inverse)
+                0.8                   # Alpha (transparency)
+            ])
+        
+        # # Debug output for first few bars
+        # if bars_drawn < 5:
+        #     print(f"Stage {j}: theta={theta:.3f}, weight={weight:.1f}, "
+        #           f"normalized={normalized_weight:.3f}, bar_length={bar_length:.3f}")
+        
+        # Draw the bar
+        draw_line(env, np.vstack([p1, p2]), 
+                 rgba=rgba, 
+                 min_size=bar_thickness, 
+                 max_size=bar_thickness)    
+
+        # Draw a sphere at the end of the first bar to indicate max weight sphere scales with max weight relative to a weight of 150
+        if j == 0:
+            max_weight_int = int(round(max_weight))
+            text_pos = p2 + 0.08 * ortho
+
+            # Proportional sphere size: max_weight=300 -> size=0.04
+            sphere_size =  0.03 * (max_weight_int / 150)
+            marker_color = np.array([1.0, 0.5, 0.0, 1.0])  # Orange for visibility
+
+            draw_point(env, text_pos, size=sphere_size, rgba=marker_color)
+            print(f"Max Weight: {max_weight_int} (sphere size: {sphere_size:.3f})")
+
+        
+        bars_drawn += 1
+    
+    print(f"Total MPC horizon bars drawn: {bars_drawn}")
