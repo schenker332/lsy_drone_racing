@@ -2,11 +2,14 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
+import os
+import sys
+
 # ------------------------------------------------------------------
 # Konfiguration: Nur hier Pfad zum Run-Ordner anpassen
 # ------------------------------------------------------------------
 
-run_dir = "logs/run_20250712_140004"
+run_dir = sys.argv[1] if len(sys.argv) > 1 else "logs/run_20250712_140004"
 
 # Pfade zu den CSV-Dateien
 state_csv   = f"{run_dir}/state_log.csv"
@@ -77,15 +80,13 @@ for _, gate in gates_df.iterrows():
     idx_closest = np.argmin(dists)
     gate_times.append((int(gate.gate_idx), time_vals[idx_closest]))
 
-# ------------------------------------------------------------------
-# 7) Plotten aller Grafiken
-# ------------------------------------------------------------------
-fig, axs = plt.subplots(2, 2, figsize=(14, 10))
-ax1, ax2, ax3, ax4 = axs.flatten()
+# 7) Plotten aller Grafiken — jetzt nur noch 1 Reihe, 2 Spalten
+fig, axs = plt.subplots(1, 2, figsize=(14, 5))
+ax1, ax2 = axs
 
 # 7.1 Ideale Ref-Speed vs. Drohne
 ax1.plot(time_vals, speed_ref_A, label='Ref-Speed (L/t)', linewidth=1.2)
-ax1.plot(time_vals, df.speed_drone, label='Drohne', alpha=0.7)
+ax1.plot(time_vals, df.speed_drone,       label='Drohne',     alpha=0.7)
 ax1.set_title('Ideale Ref-Speed vs. Drohne')
 ax1.set_xlabel('Zeit [s]')
 ax1.set_ylabel('Geschwindigkeit [m/s]')
@@ -94,49 +95,29 @@ ax1.legend()
 
 # 7.2 Gemessene Ref-Speed vs. Drohne + Gates + Durchschnitt
 ax2.plot(time_vals, speed_ref_B, label='Ref-Speed (Δs/Δt)', linewidth=1.2)
-ax2.plot(time_vals, df.speed_drone, label='Drohne', alpha=0.7)
-# Gate-Marker
+ax2.plot(time_vals, df.speed_drone,       label='Drohne',          alpha=0.7)
 for gate_idx, gt in gate_times:
     ax2.axvline(gt, color='gray', linestyle='--', alpha=0.6)
     ax2.text(gt, ax2.get_ylim()[1]*0.9, f"G{gate_idx}",
              rotation=90, va='top', ha='center', alpha=0.8)
-# Durchschnittslinie
 ax2.axhline(avg_speed_ref_B, color='blue', linestyle='-.', linewidth=1.5,
             label=f'Durchschnitt {avg_speed_ref_B:.2f} m/s')
 ax2.text(0.99, avg_speed_ref_B, f"{avg_speed_ref_B:.2f} m/s",
          va='center', ha='right', backgroundcolor='white', alpha=0.8)
+
+# Dynamische Y-Limits, kein overhang:
+ymax = max(np.nanmax(speed_ref_B), np.nanmax(df.speed_drone)) * 1.05
+ax2.set_ylim(0, ymax)
+
 ax2.set_title('Gemessene Ref-Speed vs. Drohne (mit Gates & Durchschnitt)')
 ax2.set_xlabel('Zeit [s]')
 ax2.set_ylabel('Geschwindigkeit [m/s]')
 ax2.grid(True, alpha=0.3)
 ax2.legend()
 
-# 7.3 Drohnen-Geschwindigkeit
-ax3.plot(time_vals, df.speed_drone, 'r-', label='Drohne')
-ax3.set_title('Drohnen-Geschwindigkeit')
-ax3.set_xlabel('Zeit [s]')
-ax3.set_ylabel('m/s')
-ax3.grid(True, alpha=0.3)
-ax3.legend()
-
-# 7.4 Komponenten vx, vy, vz & Gesamt-Speed
-ax4.plot(time_vals, df.vx, label='vx', alpha=0.7)
-ax4.plot(time_vals, df.vy, label='vy', alpha=0.7)
-ax4.plot(time_vals, df.vz, label='vz', alpha=0.7)
-ax4.plot(time_vals, df.speed_drone, 'k-', linewidth=2, label='Speed')
-ax4.set_title('Geschwindigkeits­komponenten Drohne')
-ax4.set_xlabel('Zeit [s]')
-ax4.set_ylabel('m/s')
-ax4.grid(True, alpha=0.3)
-ax4.legend()
-
 plt.tight_layout()
-plt.show()
 
-# ------------------------------------------------------------------
-# 8) Statistik in der Konsole
-# ------------------------------------------------------------------
-print("\nStatistik:")
-print(f"  Ref-Speed A  min/max : {np.nanmin(speed_ref_A):.2f}  /  {np.nanmax(speed_ref_A):.2f} m/s")
-print(f"  Ref-Speed B  min/max : {np.nanmin(speed_ref_B):.2f}  /  {np.nanmax(speed_ref_B):.2f} m/s")
-print(f"  Drohnen-Speed min/max : {df.speed_drone.min():.2f} / {df.speed_drone.max():.2f} m/s")
+# Speichern
+out_png = os.path.join(run_dir, "speed_plot_top_only.png")
+fig.savefig(out_png, dpi=200, bbox_inches="tight")
+print(f"➔ Plot gespeichert unter: {out_png}")

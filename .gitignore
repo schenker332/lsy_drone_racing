@@ -9,5 +9,8 @@ saves
 .pytest_cache
 **/*.json
 **/*.csv
-plots/
 c_generated_code/
+
+# local acados changes #
+acados/acados_ocp.json
+acados.diff

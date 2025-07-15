@@ -458,8 +458,8 @@ def visualize_cost_weights(env, controller):
     min_weight = np.min(horizon_weights)
     
     # # Debug output
-    # print(f"MPC Horizon Weights: min={min_weight:.3f}, max={max_weight:.3f}, stages={len(horizon_weights)}")
-    
+    print(f"MPC Horizon Weights: min={min_weight:.3f}, max={max_weight:.3f}, current weight={horizon_weights[0]:.3f} stages={len(horizon_weights)}")
+
     # Avoid division by zero
     if max_weight == min_weight:
         max_weight = min_weight + 1

@@ -310,17 +310,49 @@ class MPController(Controller):
         if self.logger:
             current_time = self._tick / self.freq
             if current_time - self._last_log_time >= 0.01:
+                # Calculate current curvature and distance
+                kappa = self.curvature(self.theta)
+                min_dist, _, _ = self.compute_min_distance_to_trajectory(obs["pos"], self.theta)
+                
                 # Referenzpunkt auf der Trajektorie
                 ref_pt = np.array([
                     self.cs_x(self.theta),
                     self.cs_y(self.theta),
                     self.cs_z(self.theta)
                 ])
+                
+                # Get current weight (this is what gets stored in p[6])
+                current_weight = self.weight_for_theta(self.theta)
+                
+                # Use existing get_visualization_data function for error calculation
+                vis_data = self.get_visualization_data(obs["pos"])
+                e_contour_magnitude = np.linalg.norm(vis_data['e_c_vec'])
+                e_lag_magnitude = abs(vis_data['e_l_scalar'])
+                
                 try:
                     u1 = self.acados_ocp_solver.get(1, "u")
-                    self.logger.log_state(current_time, xcurrent, u1, ref_point=ref_pt)
+                    self.logger.log_state(
+                        current_time, xcurrent, u1, 
+                        ref_point=ref_pt, 
+                        curvature=kappa, 
+                        min_dist=min_dist
+                    )
                 except:
-                    self.logger.log_state(current_time, xcurrent, ref_point=ref_pt)
+                    self.logger.log_state(
+                        current_time, xcurrent, 
+                        ref_point=ref_pt, 
+                        curvature=kappa, 
+                        min_dist=min_dist
+                    )
+                
+                # Log weight data with actual error values
+                self.logger.log_weight_data(
+                    current_time, 
+                    current_weight,
+                    e_contour=e_contour_magnitude,
+                    e_lag=e_lag_magnitude
+                )
+                
                 self._last_log_time = current_time
 
         # Set the initial state constraint for the OCP
@@ -338,9 +370,11 @@ class MPController(Controller):
         # print(f"theta: {self.theta:.2f}")
         self.pos = obs["pos"]
 
+        # update trajectory
+        self._handle_unified_update(obs)
+
+
         ### Try to penalisse distance to obstacles which did not work ###
-        # # update trajectory
-        # self._handle_unified_update(obs)
         # # to correct: Unused ???
         # obs_array = obs["obstacles_pos"]          # shape=(4,3)
         # obs_flat = obs_array.reshape(-1)
@@ -688,7 +722,7 @@ class MPController(Controller):
             return
         
         delta = new_pos - old_pos
-    
+        trajectory_updated = False  # Initialize this variable
         
         for target, x_factor, y_factor, z_factor, offset in self.response_mapping[trigger_id]:
             
