@@ -77,6 +77,11 @@ def main(config: str = "level2.toml", controller: str | None = None):
         ep_time = time.perf_counter() - start_time
         finished_track = next_obs["target_gate"] == -1
         logger.info(f"Track time: {ep_time:.3f}s" if finished_track else "Task not completed")
+
+       # Logger sauber schließen und Controller zurücksetzen
+        controller.episode_callback(ep_time)
+        controller.episode_reset()
+        # Falls du noch Episode‑Statistiken loggst:
     finally:
         env.close()
 
