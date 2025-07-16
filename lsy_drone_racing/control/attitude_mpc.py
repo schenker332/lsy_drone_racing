@@ -9,6 +9,9 @@ if TYPE_CHECKING:
 from lsy_drone_racing.control.create_ocp_solver import create_ocp_solver
 from lsy_drone_racing.control.helper.print_output import print_output
 from lsy_drone_racing.control.helper.datalogger import DataLogger
+import pathlib
+import subprocess
+import sys
 
 
 
@@ -229,6 +232,29 @@ class MPController(Controller):
             curr_time: Current simulation time.
         """
         pass
+
+    def episode_callback(self, curr_time: float=None):
+        """Callback at the end of each episode.
+        
+        Args:
+            curr_time: Current simulation time.
+        """
+        if self.logger:
+            self.logger.log_final_positions(
+                gates_pos=self._info.get("gates_pos"),
+                obstacles_pos=self._info.get("obstacles_pos")
+            )
+            self.logger.close()
+        # -------------- Plot erzeugen ---------------------------------
+        try:
+            plot_script = pathlib.Path("plots/plot_speed.py").resolve()   # Pfad anpassen, wenn nötig
+            subprocess.run(
+                [sys.executable, str(plot_script), str(self.logger.run_dir)],
+                check=True
+            )
+        except Exception as e:
+            print(f"[WARN] Speed-Plot konnte nicht erzeugt werden: {e}")
+
 
 
 
