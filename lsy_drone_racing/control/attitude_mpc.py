@@ -12,10 +12,35 @@ import pathlib
 import subprocess
 import sys
 
+# Add this after the GATE_ORTHOGONAL_WP_DISTANCE constant
+GATE_ORTHOGONAL_CONFIG = {
+    0: {"before": 0.05, "after": 0.3, "center": False},     # Gate 0: before + after
+    1: {"before": 0.3, "after": 0.25, "center": False},     # Gate 1: before + after
+    2: {"before": None, "after": None, "center": True},     # Gate 2: only center waypoint
+    3: {"before": 0.1, "after": 0.1, "center": False}       # Gate 3: before + after
+}
+GATE_ORTHOGONAL_WP_DISTANCE = 0.3
 
-
-if TYPE_CHECKING:
-    from numpy.typing import NDArray
+def orthogonal_waypoints(gates_obs: np.ndarray,
+                        gates_quat: np.ndarray = None,
+                        dist: float = 0.3) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Compute waypoints before and after a gate along its approach direction.
+    gate_quat is assumed in [x, y, z, w] order.
+    """
+    if gates_quat is not None:
+        # Use gate orientation - Y-axis is the approach direction
+        rot = R.from_quat(gates_quat)
+        normal = rot.apply(np.array([0.0, 1.0, 0.0]))  # Changed from [1,0,0] to [0,1,0]
+    else:
+        # Default: approach direction (forward-backward in flight direction)
+        normal = np.array([0.0, 1.0, 0.0])  # Changed from [1,0,0] to [0,1,0]
+    
+    # normalize to unit length
+    normal = normal / (np.linalg.norm(normal) + 1e-9)
+    before = gates_obs - dist * normal  # Point before the gate
+    after = gates_obs + dist * normal   # Point after the gate
+    return before, after
 
 
 class MPController(Controller):
@@ -67,63 +92,118 @@ class MPController(Controller):
             [0.0, 1.0, 0.56],       # Gate 2      
             [-0.5, 0.0, 1.11]       # Gate 3     
         ]) 
-        
+
+        # Generate orthogonal waypoints:
+        gate_orthogonal_waypoints = []
+
+        for gate_idx in range(4):
+            gate_wp_config = GATE_ORTHOGONAL_CONFIG[gate_idx]
+            gate_pos = obs["gates_pos"][gate_idx]
+            gate_quat = obs["gates_quat"][gate_idx]
+            
+            before_wp = None
+            after_wp = None
+            
+            if gate_wp_config["before"] is not None:
+                before_wp, _ = orthogonal_waypoints(gate_pos, gate_quat, dist=gate_wp_config["before"])
+            
+            if gate_wp_config["after"] is not None:
+                _, after_wp = orthogonal_waypoints(gate_pos, gate_quat, dist=gate_wp_config["after"])
+            
+            gate_orthogonal_waypoints.append((before_wp, after_wp))
+
         # Start bis Gate 0
         b0 = np.array([
             [1.0, 1.5, 0.2],
             [0.95, 1.0, 0.3],
             [0.7, 0.1, 0.4],
         ])
-        
+
+        # Gate 0: before + after waypoints (no center)
+        g0_before, g0_after = gate_orthogonal_waypoints[0]
+        g0_section = np.array([g0_before, g0_after])
+
         # Gate 0 -- Gate 1
         b1 = np.array([
             [0.2, -1.4, 0.85],
         ])
-        
-        # Gate 1 -- Gate 2
+
+        # Gate 1: before + after waypoints (no center)
+        g1_before, g1_after = gate_orthogonal_waypoints[1]
+        g1_section = np.array([g1_before, g1_after])
+
+        # Gate 1 -- Gate 2 (removed [1.15, -0.75, 1] as requested)
         b2 = np.array([
-            [1.15, -0.75, 1],
             [0.65, -0.25, 0.85],
-            # [0.4, 0, 0.8]
         ])
-        
+
+        # Gate 2: only center waypoint
+        g2_section = np.array([obs["gates_pos"][2]])
+
         # Gate 2 -- Gate 3
         b3 = np.array([
             [-0.2, 1.5, 0.56],
             [-0.9, 1.3, 0.8],
             [-0.75, 0.5, 1.11],     
         ])
-        
+
+        # Gate 3: before + after waypoints (no center)
+        g3_before, g3_after = gate_orthogonal_waypoints[3]
+        g3_section = np.array([g3_before, g3_after])
+
         # nach Gate 3 
         b4 = np.array([
             [-0.5, -2, 1.11],
             [-0.5, -6, 1.11],
         ])
-        
-        # Kombiniere alle Waypoints: b0 + gate0 + b1 + gate1 + b2 + gate2 + b3 + gate3 + b4
-        waypoint_sections = [b0, gates[0:1], b1, gates[1:2], b2, gates[2:3], b3, gates[3:4], b4]
+
+        # Combine all waypoints
+        waypoint_sections = [
+            b0, g0_section, b1, g1_section, b2, 
+            g2_section, b3, g3_section, b4
+        ]
         waypoints = np.vstack(waypoint_sections)
         
         # Automatische Indizes berechnen
         current_index = 0
         gate_indices = []
+        orthogonal_indices = {}
         waypoint_blocks = {}
-        
+
         for i, section in enumerate(waypoint_sections):
             section_length = len(section)
             
-            if i % 2 == 1:  # Ungerade Indizes sind Gates (1, 3, 5, 7)
+            if i % 2 == 1:  # Gate sections
                 gate_idx = i // 2  # 0, 1, 2, 3
-                gate_indices.append(current_index)
-            else:  # Gerade Indizes sind Waypoint-Blöcke (0, 2, 4, 6, 8)
-                block_idx = i // 2  # 0, 1, 2, 3, 4
+                gate_wp_config = GATE_ORTHOGONAL_CONFIG[gate_idx]
+                
+                if gate_wp_config["center"]:  # Gate 2: only center waypoint
+                    gate_indices.append(current_index)
+                    
+                else:  # Gates 0, 1, 3: before + after waypoints
+                    orthogonal_indices[gate_idx] = {
+                        'before': current_index,
+                        'after': current_index + 1
+                    }
+                    # Instead of None, use the middle index for approximation
+                    gate_indices.append(current_index + 0.5)  # Approximate center between before and after
+                    
+            else:  # Waypoint blocks
+                block_idx = i // 2
                 waypoint_blocks[block_idx] = list(range(current_index, current_index + section_length))
             
             current_index += section_length
-        
+
+        # Create mapping only for gates with actual integer indices
+        self.gate_to_waypoint_mapping = {}
+        for i, gate_idx in enumerate(gate_indices):
+            if isinstance(gate_idx, int):  # Only integer indices
+                self.gate_to_waypoint_mapping[i] = gate_idx
+
         # Store strukturierte Daten
         self.waypoint_blocks = waypoint_blocks
         self.gate_indices = gate_indices
+        self.orthogonal_indices = orthogonal_indices  # Store the orthogonal waypoint indices
         self.waypoints = waypoints
 
         
@@ -146,32 +226,34 @@ class MPController(Controller):
         # Trigger: "g0", "g1", "g2", "g3" für Gates oder "o0", "o1", "o2", "o3" für Obstacles
         # Target: "g0", "g1", etc. für Gates oder "b0.1", "b1.0", etc. für Block-Waypoints
         
+
         self.response_mapping = {
-            "g0": [  # Wenn sich Gate 0 ändert
-            ("g0", 1.3, 1.3, 1.3, [0.0, 0.0, 0.0]),  # Gate 0 selbst mit Offset
+            "g0": [  # Gate 0: before + after waypoints
+                ("g0_before", 1.05, 1.0, 1.0, [0.0, 0.0, 0.0]),
+                ("g0_after", 1.05, 1.0, 1.0, [0.0, 0.0, 0.0]),
             ],
 
-            "g1": [  # Wenn sich Gate 1 ändert  
-            ("g1", 1.0, 1.0, 1.0, [0.0, 0.0, 0.0]),    # Gate 1 selbst mit Offset
+            "g1": [  # Gate 1: before + after waypoints
+                ("g1_before", 1.0, 1.0, 1.0, [0.0, 0.0, 0.0]),
+                ("g1_after", 1.0, 1.0, 1.0, [0.0, 0.0, 0.0]),
             ],
 
-            "g2": [  # Wenn sich Gate 2 ändert
-            ("g2", 1.0, 1.0, 1.0, [0.0, 0.0, 0.0]),    # Gate 2 selbst (kein Offset)
-            ("b2.0", 0.3, 0.5, 0.0, [0.0, 0.0, 0.0]),  # Block 2, Waypoint 0
+            "g2": [  # Gate 2: only center waypoint
+                ("g2", 1.0, 1.0, 1.0, [0.0, 0.0, 0.0]),
+                ("b2.0", 0.3, 0.5, 0.0, [0.0, 0.0, 0.0]),
             ],
 
-            "g3": [  # Wenn sich Gate 3 ändert
-            ("g3", 1.0, 1.0, 1.0, [0.0, 0.0, 0.0]),    # Gate 3 selbst mit Offset
+            "g3": [  # Gate 3: before + after waypoints
+                ("g3_before", 1.0, 1.0, 1.0, [0.0, 0.0, 0.0]),
+                ("g3_after", 1.0, 1.0, 1.0, [0.0, 0.0, 0.0]),
             ],
 
-            "o1": [  # Wenn sich Obstacle 1 ändert  
-            ("b1.0", 1.0, 1.0, 0.0, [0.0, 0.0, 0.0]),  # Block 1, Waypoint 0 (at obstacle 2)
-            ("b1.1", 1.0, 1.0, 0.0, [0.0, 0.0, 0.0]),  # Block 1, Waypoint 1
-            ("b1.2", 1.0, 1.0, 0.0, [0.0, 0.0, 0.0]),  # Block 1, Waypoint 2
+            "o1": [
+                ("b1.0", 1.0, 1.0, 0.0, [0.0, 0.0, 0.0]),
             ],
 
-            "o3": [  # Wenn sich Obstacle 3 ändert
-            ("b3.2", 2.0, 2.0, 0.0, [0.0, 0.0, 0.0]),  # Block 3, Waypoint 2 (at obstacle 4)
+            "o3": [
+                ("b3.2", 2.0, 2.0, 0.0, [0.0, 0.0, 0.0]),
             ],
         }
         
@@ -262,8 +344,48 @@ class MPController(Controller):
         self.base_v_theta = self.v_theta
 
         # --- Gate-Specific Weighting ---
-        # Find the `theta` values corresponding to each gate
-        self.gate_thetas = [ts[i] for i in gate_indices]
+        # Find the `theta` values corresponding to each gate CENTER (not the waypoint indices)
+        # For gates without center waypoints, calculate the theta at the gate position
+        self.gate_thetas = []
+        for gate_idx in range(4):
+            gate_wp_config = GATE_ORTHOGONAL_CONFIG[gate_idx]
+            
+            if gate_wp_config["center"]:  # Gate has center waypoint
+                # Use the waypoint index directly
+                gate_wp_idx = gate_indices[gate_idx]
+                self.gate_thetas.append(ts[gate_wp_idx])
+            else:
+                # Gate doesn't have center waypoint, approximate from orthogonal waypoints
+                if gate_idx in self.orthogonal_indices:
+                    # Get before and after indices
+                    before_idx = self.orthogonal_indices[gate_idx].get('before', None)
+                    after_idx = self.orthogonal_indices[gate_idx].get('after', None)
+                    
+                    if before_idx is not None and after_idx is not None:
+                        # Both before and after exist, take average
+                        theta_center = (ts[before_idx] + ts[after_idx]) / 2.0
+                    elif before_idx is not None:
+                        # Only before exists, estimate center using distance
+                        before_dist = gate_wp_config["before"]
+                        # Approximate theta step per unit distance
+                        theta_step = before_dist / np.sum(np.linalg.norm(np.diff(waypoints, axis=0), axis=1))
+                        theta_center = ts[before_idx] + theta_step
+                    elif after_idx is not None:
+                        # Only after exists, estimate center using distance
+                        after_dist = gate_wp_config["after"]
+                        # Approximate theta step per unit distance
+                        theta_step = after_dist / np.sum(np.linalg.norm(np.diff(waypoints, axis=0), axis=1))
+                        theta_center = ts[after_idx] - theta_step
+                    else:
+                        # Fallback: use position-based search
+                        gate_pos = obs["gates_pos"][gate_idx]
+                        theta_center = self._find_theta_for_position(gate_pos)
+                else:
+                    # Fallback: use position-based search
+                    gate_pos = obs["gates_pos"][gate_idx]
+                    theta_center = self._find_theta_for_position(gate_pos)
+                    
+                self.gate_thetas.append(theta_center)
         # Peak weights for the Gaussian-like cost function around each gate
         self.gate_peak_weights = [200, 200, 200, 300] # [40, 80, 60, 140]. //// [140, 140, 140, 140] 
 
@@ -715,6 +837,7 @@ class MPController(Controller):
         self._last_gates_pos = gates_pos.copy() if gates_pos is not None else None
         self._last_obstacles_pos = obstacles_pos.copy() if obstacles_pos is not None else None
 
+
     def _apply_unified_response(self, trigger_id: str, new_pos: np.ndarray, old_pos: np.ndarray):
         """Apply unified response mapping for any trigger (gate or obstacle change)."""
         
@@ -722,7 +845,7 @@ class MPController(Controller):
             return
         
         delta = new_pos - old_pos
-        trajectory_updated = False  # Initialize this variable
+        trajectory_updated = False
         
         for target, x_factor, y_factor, z_factor, offset in self.response_mapping[trigger_id]:
             
@@ -734,7 +857,7 @@ class MPController(Controller):
             ])
             
             # Apply to target
-            if target.startswith("g"):  # Gate target
+            if target.startswith("g") and not "_" in target:  # Gate center target
                 gate_idx = int(target[1:])
                 if gate_idx in self.gate_to_waypoint_mapping:
                     wp_idx = self.gate_to_waypoint_mapping[gate_idx]
@@ -742,6 +865,28 @@ class MPController(Controller):
                         self.waypoints[wp_idx] += response_delta
                         trajectory_updated = True
                         
+            elif target.startswith("g") and "_" in target:  # Orthogonal gate waypoints
+                parts = target.split("_")
+                gate_idx = int(parts[0][1:])
+                direction = parts[1]  # "before" or "after"
+                
+                if gate_idx in self.orthogonal_indices:
+                    if direction in self.orthogonal_indices[gate_idx]:
+                        wp_idx = self.orthogonal_indices[gate_idx][direction]
+                        if 0 <= wp_idx < len(self.waypoints):
+                            # Update orthogonal waypoint with new gate position + orthogonal offset
+                            new_gate_pos = new_pos
+                            gate_quat = self._info.get("gates_quat", [None, None, None, None])[gate_idx]
+                            gate_wp_config = GATE_ORTHOGONAL_CONFIG[gate_idx]
+                            
+                            if direction == "before" and gate_wp_config["before"] is not None:
+                                before, _ = orthogonal_waypoints(new_gate_pos, gate_quat, gate_wp_config["before"])
+                                self.waypoints[wp_idx] = before
+                            elif direction == "after" and gate_wp_config["after"] is not None:
+                                _, after = orthogonal_waypoints(new_gate_pos, gate_quat, gate_wp_config["after"])
+                                self.waypoints[wp_idx] = after
+                            trajectory_updated = True
+                            
             elif target.startswith("b"):  # Block waypoint target
                 # Parse "b2.1" -> block=2, waypoint_in_block=1
                 parts = target[1:].split(".")
@@ -799,3 +944,27 @@ class MPController(Controller):
         # Return the final weight for this theta
         return w
 
+    def _find_theta_for_position(self, target_pos: np.ndarray) -> float:
+        """
+        Helper function to find the theta parameter for a given target position.
+        Find the theta parameter on the trajectory that is closest to the target position.
+        
+        Args:
+            target_pos: The 3D position to find the closest theta for
+            
+        Returns:
+            The theta parameter (0 to 1) closest to the target position
+        """
+        # Sample the trajectory at many points
+        theta_samples = np.linspace(0, 1, 1000)
+        min_dist = float('inf')
+        best_theta = 0.0
+        
+        for theta in theta_samples:
+            traj_pos = np.array([self.cs_x(theta), self.cs_y(theta), self.cs_z(theta)])
+            dist = np.linalg.norm(target_pos - traj_pos)
+            if dist < min_dist:
+                min_dist = dist
+                best_theta = theta
+        
+        return best_theta

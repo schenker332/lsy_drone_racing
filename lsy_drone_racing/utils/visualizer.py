@@ -146,25 +146,33 @@ class SimVisualizer:
 
         
 
- # Draw waypoints
+        # Draw waypoints
         waypoint_info = controller.get_waypoints()
         waypoints = waypoint_info['waypoints']
         gate_indices = waypoint_info['gate_indices']
-        
+
         # Draw normal waypoints (small blue points)
         for i, wp in enumerate(waypoints):
-            if i not in gate_indices:  # Only draw non-gate waypoints
+            # Check if this waypoint is a gate waypoint
+            is_gate_waypoint = False
+            for gate_idx in gate_indices:
+                if isinstance(gate_idx, int) and i == gate_idx:
+                    is_gate_waypoint = True
+                    break
+            
+            if not is_gate_waypoint:
                 draw_point(env, wp, size=0.02, rgba=np.array([0.0, 0.0, 1.0, 0.7]))  # Blue
-        
-        # Draw gate waypoints (larger red points)
+
+        # Draw gate waypoints (larger red points) - only for gates with center waypoints
         for gate_idx in gate_indices:
-            if gate_idx < len(waypoints):
+            if isinstance(gate_idx, int) and gate_idx < len(waypoints):
                 draw_point(env, waypoints[gate_idx], size=0.03, rgba=np.array([1.0, 0.0, 0.0, 0.9]))  # Red
 
-        stage, near = controller.get_stage_vs_nearest()
-        for p, q in zip(stage, near):   # alle Schritte zeigen
-            draw_line(env, np.vstack((p,q)),
-                    rgba=np.array([1,0.5,0,0.6]), min_size=1.5, max_size=1.5)
-            draw_point(env, p, size=0.012, rgba=np.array([0,0.5,1,0.8]))
-            draw_point(env, q, size=0.012, rgba=np.array([1,0.5,0,0.8]))
+        # Draw orthogonal waypoints (bright red points)
+        orthogonal_indices = waypoint_info.get('orthogonal_indices', {})
+        for gate_idx, indices in orthogonal_indices.items():
+            for direction, wp_idx in indices.items():
+                if wp_idx < len(waypoints):
+                    draw_point(env, waypoints[wp_idx], size=0.025, rgba=np.array([1.0, 0.0, 0.0, 0.9]))  # Bright red
+
 
