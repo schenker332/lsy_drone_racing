@@ -8,6 +8,7 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 from lsy_drone_racing.control.create_ocp_solver import create_ocp_solver
 from lsy_drone_racing.control.helper.print_output import print_output
+from lsy_drone_racing.control.helper.datalogger import DataLogger
 
 
 
@@ -51,6 +52,15 @@ class MPController(Controller):
 
         ])
 
+
+        # Toggle logging by setting this flag to True or False
+        self.logging_enabled = True
+        if  self.logging_enabled:
+            # Initialize logger
+            self.logger = DataLogger(log_dir="logs")
+            self._last_log_time = -1
+        else:
+            self.logger = None
 
 
         
