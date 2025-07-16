@@ -127,7 +127,23 @@ class MPController(Controller):
         self.acados_ocp_solver.set(0, "lbx", xcurrent)
         self.acados_ocp_solver.set(0, "ubx", xcurrent)
 
-
+        # Log state vector every 0.1 seconds
+        if self.logger:
+            current_time = self._tick / self.freq
+            # nur alle 0.01 s loggen
+            if current_time - self._last_log_time >= 0.01:
+                # Referenzpunkt auf der Trajektorie
+                ref_pt = np.array([
+                    self.cs_x(self.theta),
+                    self.cs_y(self.theta),
+                    self.cs_z(self.theta)
+                ])
+                try:
+                    u1 = self.acados_ocp_solver.get(1, "u")
+                    self.logger.log_state(current_time, xcurrent, u1, ref_point=ref_pt)
+                except:
+                    self.logger.log_state(current_time, xcurrent, ref_point=ref_pt)
+                self._last_log_time = current_time
 
         min_dist,_,min_theta = self.compute_min_distance_to_trajectory(obs["pos"])
 
