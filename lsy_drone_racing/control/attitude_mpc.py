@@ -17,7 +17,7 @@ GATE_ORTHOGONAL_CONFIG = {
     0: {"before": 0.05, "after": 0.3, "center": False},     # Gate 0: before + after
     1: {"before": 0.3, "after": 0.25, "center": False},     # Gate 1: before + after
     2: {"before": None, "after": None, "center": True},     # Gate 2: only center waypoint
-    3: {"before": 0, "after": 0.1, "center": False}       # Gate 3: before + after
+    3: {"before": 0.001, "after": 0.1, "center": False}       # Gate 3: before + after
 }
 GATE_ORTHOGONAL_WP_DISTANCE = 0.3
 
@@ -90,7 +90,7 @@ class MPController(Controller):
             [0.45, -0.5, 0.56],     # Gate 0      
             [1.0, -1.05, 1.11],     # Gate 1     
             [0.0, 1.0, 0.56],       # Gate 2      
-            [-0.5, 0.0, 1.11]       # Gate 3     
+            [-0.5, 0.0, 1.2]       # Gate 3     
         ]) 
 
         # Generate orthogonal waypoints:
