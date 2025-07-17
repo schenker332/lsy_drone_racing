@@ -43,36 +43,22 @@ def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosO
     ocp.cost.cost_type = 'EXTERNAL'
     ocp.cost.cost_type_e = 'EXTERNAL'
     
-    ### LEARNING: Similar as for gate penalties, too high contouing error can caouse frek instability incidents
+
     q_c = 70 # contour error 
     q_l = 60 # lag error
-    # mu = 0.00065 # progress
-    #mu = 0.0008
-    ### LEARNING: Progress weight can be really hign and sometimes makes the controller more reliable => 0.6 also worked
     mu = 0.008  # progress 0.0015 
     q_min = p[6]  # gaussian weight
     max_v_theta = 0.15  # maximum progress velocity
     dv_theta_max = 0.35  # maximum progress acceleration
 
 
-    # Hover Thrust
-    MASS    = 0.033       
-    GRAVITY = 9.81     
-    f_coll = x[9]
-    f_coll_cmd = x[10]
-    hover_error = f_coll - MASS * GRAVITY
-    hover_error_cmd = f_coll_cmd - MASS * GRAVITY
 
-    dv_theta_cmd_sign = np.sign(u[4])
-    #start 
     # Inputs
     q_u_vec = DM([0.02, 0.05, 0.05, 0.05, 0.05])  # Gewichtung für df_cmd, dr_cmd, dp_cmd, dy_cmd, dv_theta_cmd
-    weighted_squares = q_u_vec * (u**2)
-    # control_cost = sum1(weighted_squares)
     control_cost = q_u_vec[0] * u[0]**2 + q_u_vec[1] * u[1]**2 + q_u_vec[2] * u[2]**2 + q_u_vec[3] * u[3]**2 + q_u_vec[4] * (u[4]**2)
 
     # Set cost funnction
-    ocp.model.cost_expr_ext_cost    = q_c * e_c**2 + q_l * e_l**2   - mu * x[15]   + q_min * min_distance**2   + control_cost     #+ hover_error**2 + hover_error_cmd**2 
+    ocp.model.cost_expr_ext_cost    = q_c * e_c**2 + q_l * e_l**2   - mu * x[15]   + q_min * min_distance**2   + control_cost     
     ocp.model.cost_expr_ext_cost_e  = q_c * e_c**2 + q_l * e_l**2   - mu * x[15]   + q_min * min_distance**2
 
 

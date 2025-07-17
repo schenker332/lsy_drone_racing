@@ -28,10 +28,12 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 import warnings
 warnings.filterwarnings("ignore", message="Explicitly requested dtype float64.*")
+import time
 
-
-
-
+### ========== logger ==========================
+from datetime import datetime
+import csv       # falls du CSV statt NPY willst
+### ============================================
 
 
 def simulate(
@@ -54,6 +56,13 @@ def simulate(
     """
     # Load configuration and check if firmare should be used.
     config = load_config(Path(__file__).parents[1] / "config" / config)
+
+    ### ========== logger ==========================
+    sim_start = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    log_root = Path(__file__).parents[1] / "logs" / sim_start
+    log_root.mkdir(parents=True, exist_ok=True)
+    ### ============================================
+
     if gui is None:
         gui = config.sim.gui
     else:
@@ -72,7 +81,8 @@ def simulate(
         track=config.env.track,
         disturbances=config.env.get("disturbances"),
         randomizations=config.env.get("randomizations"),
-        seed=config.env.seed,
+        # seed=config.env.seed,
+        seed=int(time.time()) % 100000,
     )
     env = JaxToNumpy(env)
 
@@ -102,8 +112,61 @@ def simulate(
 
             env.unwrapped.sim.max_visual_geom = 5_000
 
+            # =============== logger =========================
+            prev_go_values = None                 # voriger Snapshot (Liste[float])
+            go_file       = log_root / f"run_{len(ep_times):03d}_gates_obst.csv"
+            go_header_written = False             # Flag, damit Kopfzeile nur 1× kommt
+            # =================================================
+
             while True:
+
+                
                 curr_time = i / config.env.freq
+                ### ============== logger =========================
+                run_log = controller.get_xcurrent_log()
+
+                if run_log:                                      # nur speichern, wenn Daten da sind
+                    num_states = len(run_log[0][1])
+                    log_file = log_root / f"run_{len(ep_times):03d}_xcurrent.csv"
+                    with log_file.open("w", newline="") as f:
+                        writer = csv.writer(f)
+                        writer.writerow(["t", *[f"x{i}" for i in range(num_states)]])
+                        for t, x in run_log:
+                            writer.writerow([t, *x])
+                else:
+                    logger.warning("Kein xcurrent‑Log für diesen Run gesammelt.")
+                                # ========== Gate/Obstacle Snapshot ==========
+                g_pos  = obs["gates_pos"].flatten()
+                g_quat = obs["gates_quat"].flatten()
+                o_pos  = obs["obstacles_pos"].flatten()
+
+                # 1) runden (2 Dez.) und in Liste verwandeln
+                curr_go_values = [round(v, 3) for v in
+                                np.hstack((g_pos, g_quat, o_pos)).tolist()]
+
+                # 2) Vergleich & evtl. Schreiben
+                if prev_go_values is None or curr_go_values != prev_go_values:
+                    if not go_header_written:
+                        header = ["t"]
+                        n_gates = len(obs["gates_pos"])
+                        for g in range(n_gates):
+                            header += [f"g{g}_{k}" for k in ("x","y","z","qx","qy","qz","qw")]
+                        n_obst = len(obs["obstacles_pos"])
+                        for o in range(n_obst):
+                            header += [f"o{o}_{k}" for k in ("x","y","z")]
+
+                        with go_file.open("w", newline="") as f:
+                            csv.writer(f).writerow(header)
+                        go_header_written = True
+
+                    with go_file.open("a", newline="") as f:
+                        csv.writer(f).writerow([f"{curr_time:.3f}", *[f"{v:.3f}" for v in curr_go_values]])
+
+                    prev_go_values = curr_go_values
+
+                ### ===================================================
+
+
 
                 action = controller.compute_control(obs, info)
                 obs, reward, terminated, truncated, info = env.step(action)
@@ -111,19 +174,15 @@ def simulate(
                 controller_finished = controller.step_callback(action, obs, reward, terminated, truncated, info)
                 # Update and visualize the simulation
                 SimVisualizer.update_visualization(env, obs, controller, config, all_trajectories, flown_positions, last_gates_positions, gate_update_points, last_obstacles_positions, obstacle_update_points)
-
                 if config.sim.gui:
                     env.render()
-
-
                 if terminated or truncated or controller_finished:
                     break
-                # # Synchronize the GUI.
-                # if config.sim.gui:
-                #     if ((i * fps) % config.env.freq) < fps:
-                #         env.render()
                 i += 1
 
+
+
+            # Log the final positions of gates and obstacles
             controller.episode_callback(curr_time)  # Update the controller internal state and models.
             log_episode_stats(obs, info, config, curr_time)
             controller.episode_reset()

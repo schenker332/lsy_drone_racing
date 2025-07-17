@@ -9,10 +9,7 @@ if TYPE_CHECKING:
 from lsy_drone_racing.control.create_ocp_solver import create_ocp_solver
 from lsy_drone_racing.control.helper.print_output import print_output
 from lsy_drone_racing.control.helper.datalogger import DataLogger
-import pathlib
-import subprocess
-import sys
-
+from datetime import datetime
 
 
 class MPController(Controller):
@@ -50,23 +47,11 @@ class MPController(Controller):
             [-0.2, 1.4, 0.66],
             [-0.9, 1.3, 0.8], 
             [-0.5, 0, 1.11],     # gate4
-            [-0.1, -1, 1.2] # point after gate for clean trajectory to finish 
-            ### LEARNING: Last poun needs to be really far out for a smooth trajectory though the gate (at least with our current trajectory calculation)
+            [-0.1, -1, 1.2] 
 
         ])
 
 
-        # Toggle logging by setting this flag to True or False
-        self.logging_enabled = True
-        if  self.logging_enabled:
-            # Initialize logger
-            self.logger = DataLogger(log_dir="logs")
-            self._last_log_time = -1
-        else:
-            self.logger = None
-
-
-        
         
         ts = np.linspace(0, 1, np.shape(waypoints)[0])
         self.cs_x = CubicSpline(ts, waypoints[:, 0])
@@ -79,9 +64,7 @@ class MPController(Controller):
 
         gate_indices = [3, 6, 9, 11, 12]
         self.gate_thetas = [ts[i] for i in gate_indices]
-        ### LEARNING: Weights that are higher than 60 can cause huge issues, 
-        # if the drone is not able to get the curve (i.e. reversing back, crashing into the gate, 
-        # or deliberately missting the gate to avoid a high off-center penalty)
+
         self.gate_peak_weights = [35, 50, 60, 5, 120] 
 
 
@@ -99,6 +82,12 @@ class MPController(Controller):
         self._info = info
         self.waypoints = waypoints
         self._path_log = []
+        
+        
+        ### ========== logger ==========================
+        self._log_every = 1
+        self._xcurrent_log: list[tuple[float, np.ndarray]] = []   # (t, xcurrent)
+        ### ============================================
 
 
 
@@ -127,23 +116,7 @@ class MPController(Controller):
         self.acados_ocp_solver.set(0, "lbx", xcurrent)
         self.acados_ocp_solver.set(0, "ubx", xcurrent)
 
-        # Log state vector every 0.1 seconds
-        if self.logger:
-            current_time = self._tick / self.freq
-            # nur alle 0.01 s loggen
-            if current_time - self._last_log_time >= 0.01:
-                # Referenzpunkt auf der Trajektorie
-                ref_pt = np.array([
-                    self.cs_x(self.theta),
-                    self.cs_y(self.theta),
-                    self.cs_z(self.theta)
-                ])
-                try:
-                    u1 = self.acados_ocp_solver.get(1, "u")
-                    self.logger.log_state(current_time, xcurrent, u1, ref_point=ref_pt)
-                except:
-                    self.logger.log_state(current_time, xcurrent, ref_point=ref_pt)
-                self._last_log_time = current_time
+
 
         min_dist,_,min_theta = self.compute_min_distance_to_trajectory(obs["pos"])
 
@@ -164,6 +137,11 @@ class MPController(Controller):
             ])
             self.acados_ocp_solver.set(j, "p", p_ref)
 
+
+        ### ========== logger ==========================
+        curr_sim_time = self._tick / self.freq   # reale Simulationszeit (s)
+        self._log_xcurrent(curr_sim_time, xcurrent)
+        ### ============================================
 
         # Solve the MPC problem
         self.acados_ocp_solver.solve()
@@ -205,8 +183,6 @@ class MPController(Controller):
         self.theta = min(1.0, self.theta + self.v_theta * self.dt)
   
   
-  
-
         cmd = x1[10:14]
         
         return cmd
@@ -234,6 +210,9 @@ class MPController(Controller):
         # Store drone position for trajectory logging
         self._path_log.append(obs["pos"].copy())
         return self.finished
+    
+
+
 
     def episode_reset(self):
         """Reset controller state for a new episode."""
@@ -255,22 +234,7 @@ class MPController(Controller):
         Args:
             curr_time: Current simulation time.
         """
-        if self.logger:
-            self.logger.log_final_positions(
-                gates_pos=self._info.get("gates_pos"),
-                obstacles_pos=self._info.get("obstacles_pos")
-            )
-            self.logger.close()
-        # -------------- Plot erzeugen ---------------------------------
-        try:
-            plot_script = pathlib.Path("plots/plot_speed.py").resolve()   # Pfad anpassen, wenn nötig
-            subprocess.run(
-                [sys.executable, str(plot_script), str(self.logger.run_dir)],
-                check=True
-            )
-        except Exception as e:
-            print(f"[WARN] Speed-Plot konnte nicht erzeugt werden: {e}")
-
+        pass
 
 
 
@@ -403,3 +367,26 @@ class MPController(Controller):
             w         = max(w, base_weight + influence)
 
         return w
+    
+
+    # =================== logger =========================
+    def _log_xcurrent(self, t: float, xcurrent: np.ndarray) -> None:
+        """Merke Zeit, xcurrent und Soll‑Position auf dem Pfad."""
+        if self._tick % self._log_every == 0:
+            ref_pos = np.array([self.cs_x(self.theta),
+                                self.cs_y(self.theta),
+                                self.cs_z(self.theta)], dtype=float)
+
+            x_with_ref = np.hstack((xcurrent, ref_pos))
+            self._xcurrent_log.append((t, x_with_ref))
+
+
+    def get_xcurrent_log(self) -> list[tuple[float, np.ndarray]]:
+        """Gibt das bisher gesammelte Log zurück (Liste von (t, xcurr))."""
+        return self._xcurrent_log
+
+    def reset_logs(self) -> None:
+        """Leert alle internen Log‑Puffer – nach jedem Run aufrufen!"""
+        self._xcurrent_log.clear()
+
+    # =====================================================
