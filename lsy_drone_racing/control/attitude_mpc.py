@@ -12,6 +12,15 @@ from lsy_drone_racing.control.helper.datalogger import DataLogger
 from datetime import datetime
 
 
+GATE_WEIGHT_CONFIG = {
+    0: {"peak_weight": 35, "sigma": 0.04},   # Gate 0: narrow peak
+    1: {"peak_weight": 50, "sigma": 0.02}, # Gate 1: wider peak  
+    2: {"peak_weight": 60, "sigma": 0.08},  # Gate 2: narrow peak
+    3: {"peak_weight": 120, "sigma": 0.04}  # Gate 3: very narrow, high peak
+}
+
+# self.gate_peak_weights = [35, 50, 60, 120] 
+
 class MPController(Controller):
     """Model Predictive Controller using collective thrust and attitude interface."""
 
@@ -32,7 +41,7 @@ class MPController(Controller):
         gates = np.array([
             [0.45, -0.50, 0.56],  # Gate 0      [0.45, -0.5, 0.56]
             [1.0, -1.05, 1.2],   # Gate 1      [1.0, -1.05, 1.11]
-            [0.0, 1.0, 0.66],     # Gate 2      [0.0, 1.0, 0.56]
+            [-0.04, 1.0, 0.59],     # Gate 2      [0.0, 1.0, 0.56]
             [-0.5, 0.0, 1.11]     # Gate 3      [-0.5, 0.0, 1.11]
         ])
         
@@ -45,7 +54,7 @@ class MPController(Controller):
         
         # Gate 0 -- Gate 1
         b1 = np.array([
-            [0.2, -0.7, 0.65],  
+            [0.25, -0.7, 0.65],  
             # [0.1, -1.0, 0.75],
             [0.5, -1.5, 0.8]
         ])
@@ -59,7 +68,7 @@ class MPController(Controller):
         # Gate 2 -- Gate 3
         b3 = np.array([
             [-0.2, 1.4, 0.66],
-            [-0.9, 1.3, 0.8],
+            [-0.97, 1.3, 0.8],
             # [-0.75, 0.5, 1.11]   
         ])
         
@@ -182,7 +191,12 @@ class MPController(Controller):
 
 
         self.gate_thetas = [ts[i] for i in gate_indices]
-        self.gate_peak_weights = [35, 50, 60, 120] 
+
+
+        self.gate_peak_weights = [GATE_WEIGHT_CONFIG[i]["peak_weight"] for i in range(4)]
+        self.gate_sigmas = [GATE_WEIGHT_CONFIG[i]["sigma"] for i in range(4)]
+
+        # self.gate_peak_weights = [35, 50, 60, 120] 
 
 
         # Create the optimal control problem solver
@@ -579,10 +593,30 @@ class MPController(Controller):
     # =====================================================
 
     def weight_from_theta(self, theta: float) -> float:
+        """
+        Calculates the contouring cost weight based on the progress `theta`.
+
+        The weight is increased when the drone is near a gate, creating a
+        Gaussian-like peak in the cost function. This encourages tighter
+        tracking in critical regions of the trajectory.
+
+        Args:
+            theta: The current progress along the trajectory (0 to 1).
+
+        Returns:
+            The calculated weight for the contouring cost.
+        """
+        # Start with the base weight (default cost away from gates)
         w = self.base_weight
-        for θ_g, peak in zip(self.gate_thetas, self.gate_peak_weights):
-            diff  = (theta - θ_g) / self.sigma
-            w     = max(w, self.base_weight + (peak - self.base_weight)*np.exp(-0.5*diff*diff))
+        # Loop over all gates with their individual sigmas and peak weights
+        for gate_theta, peak_weight, sigma in zip(self.gate_thetas, self.gate_peak_weights, self.gate_sigmas):
+            # Compute the normalized distance from the current theta to the gate's theta
+            diff = (theta - gate_theta) / sigma  # self.sigma controls the width of the peak
+            # Compute the Gaussian-shaped influence of this gate
+            gate_influence = (peak_weight - self.base_weight) * np.exp(-0.5 * diff * diff)
+            # The weight at this theta is the maximum of the base weight and all gate influences
+            w = max(w, self.base_weight + gate_influence)
+        # Return the final weight for this theta
         return w
     
     def _handle_unified_update(self, obs: dict[str, NDArray[np.floating]]):
