@@ -48,7 +48,7 @@ def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosO
     q_l = 60 # lag error
     mu = 0.008  # progress 0.0015 
     q_min = p[6]  # gaussian weight
-    max_v_theta = 0.13  # maximum progress velocity
+    max_v_theta = 0.14  # maximum progress velocity
     dv_theta_max = 0.35  # maximum progress acceleration
 
 

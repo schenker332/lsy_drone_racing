@@ -3,6 +3,9 @@
 Usage:
 
 python deploy.py <path/to/controller.py> <path/to/config.toml>
+python deploy.py  --controller attitude_mpc.py --config level2.toml
+
+
 
 """
 
