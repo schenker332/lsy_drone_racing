@@ -17,9 +17,20 @@ GATE_ORTHOGONAL_CONFIG = {
     0: {"before": 0.05, "after": 0.3, "center": False},     # Gate 0: before + after
     1: {"before": 0.3, "after": 0.25, "center": False},     # Gate 1: before + after
     2: {"before": None, "after": None, "center": True},     # Gate 2: only center waypoint
-    3: {"before": 0.001, "after": 0.1, "center": False}       # Gate 3: before + after
+    3: {"before": 0.05, "after": None, "center": False}       # Gate 3: before + after
 }
-GATE_ORTHOGONAL_WP_DISTANCE = 0.3
+
+
+# Set peak weights for the Gaussian-like cost function around each gate]
+# Set individual sigma values for each gate (controls the width of the Gaussian peak); 0.01 5% is of the norm scale
+GATE_WEIGHT_CONFIG = {
+    0: {"peak_weight": 1500, "sigma": 0.04},   # Gate 0: narrow peak
+    1: {"peak_weight": 300, "sigma": 0.02}, # Gate 1: wider peak  
+    2: {"peak_weight": 1500, "sigma": 0.08},  # Gate 2: narrow peak
+    3: {"peak_weight": 300, "sigma": 0.04}  # Gate 3: very narrow, high peak
+}
+
+V_THETA_MAX = 0.13  # Base rate of progress, can be adjusted dynamically
 
 def orthogonal_waypoints(gates_obs: np.ndarray,
                         gates_quat: np.ndarray = None,
@@ -83,6 +94,7 @@ class MPController(Controller):
         #     [1.0, -1.05, 1.25],   # Gate 1      [1.0, -1.05, 1.11]
         #     [0.0, 1.0, 0.56],     # Gate 2      [0.0, 1.0, 0.56]
         #     [-0.5, 0.0, 1.11]     # Gate 3      [-0.5, 0.0, 1.11]
+        # y is towards the wall and x towards the comp
         # ])
 
         ### Original Gate-Positions
@@ -141,15 +153,19 @@ class MPController(Controller):
         g2_section = np.array([obs["gates_pos"][2]])
 
         # Gate 2 -- Gate 3
-        b3 = np.array([
+        b3_1 = np.array([
             [-0.2, 1.5, 0.56],
-            [-0.9, 1.3, 0.8],
+            [-0.9, 1.3, 0.8],   
+        ])
+
+        b3_2 = np.array([
             [-0.75, 0.5, 1.11],     
         ])
 
         # Gate 3: before + after waypoints (no center)
         g3_before, g3_after = gate_orthogonal_waypoints[3]
-        g3_section = np.array([g3_before, g3_after])
+        # g3_section = np.array([g3_before, g3_after])
+        g3_section = np.array([g3_before])
 
         # nach Gate 3 
         b4 = np.array([
@@ -159,22 +175,33 @@ class MPController(Controller):
 
         # Combine all waypoints
         waypoint_sections = [
-            b0, g0_section, b1, g1_section, b2, 
-            g2_section, b3, g3_section, b4
-        ]
-        waypoints = np.vstack(waypoint_sections)
-        
-        # Automatische Indizes berechnen
+        ("block", "b0", b0),
+        ("gate", "g0", g0_section),
+        ("block", "b1", b1),
+        ("gate", "g1", g1_section),
+        ("block", "b2", b2),
+        ("gate", "g2", g2_section),
+        ("block", "b3_1", b3_1),
+        ("block", "b3_2", b3_2),
+        ("gate", "g3", g3_section),
+        ("block", "b4", b4)
+    ]
+        # Stack all waypoints for the spline
+        waypoints = np.vstack([section[2] for section in waypoint_sections])
+
+        # Calculate indices with explicit section handling
         current_index = 0
         gate_indices = []
         orthogonal_indices = {}
         waypoint_blocks = {}
+        gate_counter = 0
+        block_counter = 0
 
-        for i, section in enumerate(waypoint_sections):
-            section_length = len(section)
+        for section_type, section_name, section_data in waypoint_sections:
+            section_length = len(section_data)
             
-            if i % 2 == 1:  # Gate sections
-                gate_idx = i // 2  # 0, 1, 2, 3
+            if section_type == "gate":
+                gate_idx = gate_counter
                 gate_wp_config = GATE_ORTHOGONAL_CONFIG[gate_idx]
                 
                 if gate_wp_config["center"]:  # Gate 2: only center waypoint
@@ -183,14 +210,16 @@ class MPController(Controller):
                 else:  # Gates 0, 1, 3: before + after waypoints
                     orthogonal_indices[gate_idx] = {
                         'before': current_index,
-                        'after': current_index + 1
+                        'after': current_index + 1 if section_length > 1 else None
                     }
-                    # Instead of None, use the middle index for approximation
-                    gate_indices.append(current_index + 0.5)  # Approximate center between before and after
+                    # Use middle index for approximation
+                    gate_indices.append(current_index + 0.5 if section_length > 1 else current_index)
                     
-            else:  # Waypoint blocks
-                block_idx = i // 2
-                waypoint_blocks[block_idx] = list(range(current_index, current_index + section_length))
+                gate_counter += 1
+                
+            elif section_type == "block":
+                waypoint_blocks[section_name] = list(range(current_index, current_index + section_length))
+                block_counter += 1
             
             current_index += section_length
 
@@ -226,7 +255,6 @@ class MPController(Controller):
         # Trigger: "g0", "g1", "g2", "g3" für Gates oder "o0", "o1", "o2", "o3" für Obstacles
         # Target: "g0", "g1", etc. für Gates oder "b0.1", "b1.0", etc. für Block-Waypoints
         
-
         self.response_mapping = {
             "g0": [  # Gate 0: before + after waypoints
                 ("g0_before", 1.05, 1.0, 1.0, [0.0, 0.0, 0.0]),
@@ -243,17 +271,22 @@ class MPController(Controller):
                 ("b2.0", 0.3, 0.5, 0.0, [0.0, 0.0, 0.0]),
             ],
 
-            "g3": [  # Gate 3: before + after waypoints
+            "g3": [  # Gate 3: before waypoint only
                 ("g3_before", 1.0, 1.0, 1.0, [0.0, 0.0, 0.0]),
-                ("g3_after", 1.0, 1.0, 1.0, [0.0, 0.0, 0.0]),
+                #("g3_after", 1.0, 1.0, 1.0, [0.0, 0.0, 0.0]),
             ],
 
             "o1": [
                 ("b1.0", 1.0, 1.0, 0.0, [0.0, 0.0, 0.0]),
             ],
 
+            "o2": [  # Obstacle 2 mapping
+                ("b3_1.0", 1.0, 1.0, 0.0, [0.0, 0.0, 0.0]),
+        ("g2", 0.5, 0.5, 1.0, [0.0, 0.0, 0.0]),
+            ],
+
             "o3": [
-                ("b3.2", 2.0, 2.0, 0.0, [0.0, 0.0, 0.0]),
+                ("b3_2.0", 2.0, 2.0, 0.0, [0.0, 0.0, 0.0]),
             ],
         }
         
@@ -302,8 +335,8 @@ class MPController(Controller):
         # --- Trajectory Progress ---
         self.theta = 0.0  # Progress along the trajectory (0 to 1)
         # Time to complete the trajectory, affects the base progress speed
-        t = 4.7
-        self.v_theta = 1 / (t * self.dt * self.freq)  # Base rate of progress
+        t = 5.5
+        self.v_theta = max(1 / (t * self.dt * self.freq), V_THETA_MAX)  # Base rate of progress
         self.base_v_theta = self.v_theta
 
         # --- Curvature Calculation ---
@@ -340,7 +373,7 @@ class MPController(Controller):
             # Curvature formula: |v x a| / |v|^3
             return num / den
         
-        self.curvature = curvature    
+        self.curvature = curvature
         self.base_v_theta = self.v_theta
 
         # --- Gate-Specific Weighting ---
@@ -386,8 +419,10 @@ class MPController(Controller):
                     theta_center = self._find_theta_for_position(gate_pos)
                     
                 self.gate_thetas.append(theta_center)
-        # Peak weights for the Gaussian-like cost function around each gate
-        self.gate_peak_weights = [200, 200, 200, 300] # [40, 80, 60, 140]. //// [140, 140, 140, 140] 
+
+         # Extract peax wewights and peak sigmas from the configuration
+        self.gate_peak_weights = [GATE_WEIGHT_CONFIG[i]["peak_weight"] for i in range(4)]
+        self.gate_sigmas = [GATE_WEIGHT_CONFIG[i]["sigma"] for i in range(4)]
 
         # --- OCP Solver Setup ---
         self.acados_ocp_solver, self.ocp = create_ocp_solver(self.T_HORIZON, self.N)
@@ -396,7 +431,6 @@ class MPController(Controller):
         # Base weight for the contouring error cost
         self.base_weight = 130.0
         # Sigma for the Gaussian-like weight distribution around gates
-        self.sigma = 0.01 # 5% of the norm scale
 
     def compute_control(
         self, obs: dict[str, NDArray[np.floating]], info: dict | None = None
@@ -432,8 +466,21 @@ class MPController(Controller):
         if self.logger:
             current_time = self._tick / self.freq
             if current_time - self._last_log_time >= 0.01:
+                
+                ### LEftover abandoned test calculate and update the curvature for a future theta
+                # caluclate kappa over a larger horizon does not seem to make a big difference. trid for N 5-20
+                # prediction_step = 10
+                # theta_N10 = min(self.theta + prediction_step * self.v_theta * self.dt, 1.0)
+                # kappaN0 = self.curvature(self.theta)
+                # kappaN9 = self.curvature(theta_N10)
+                # kappa = (kappaN0 + kappaN9) / 2.0
+                 # print(f"Curv N=0: {kappaN0}, Curv N=9: {kappaN9}", "combined:", kappa)
+
                 # Calculate current curvature and distance
                 kappa = self.curvature(self.theta)
+
+               
+
                 min_dist, _, _ = self.compute_min_distance_to_trajectory(obs["pos"], self.theta)
                 
                 # Referenzpunkt auf der Trajektorie
@@ -487,7 +534,7 @@ class MPController(Controller):
         ### ============ Set parameters =========== ###
         ### ======================================= ###
 
-        _,_,min_theta = self.compute_min_distance_to_trajectory(obs["pos"], self.theta)
+        # _,_,min_theta = self.compute_min_distance_to_trajectory(obs["pos"], self.theta)
         ## Debugging print for theta
         # print(f"theta: {self.theta:.2f}")
         self.pos = obs["pos"]
@@ -837,6 +884,20 @@ class MPController(Controller):
         self._last_gates_pos = gates_pos.copy() if gates_pos is not None else None
         self._last_obstacles_pos = obstacles_pos.copy() if obstacles_pos is not None else None
 
+    # def _calculate_obstacle2_offset(self, new_pos: np.ndarray, old_pos: np.ndarray, target: str) -> np.ndarray:
+    #     """Calculate offset for obstacle 2 based on position."""
+    #     if new_pos[0] < -0.05:
+    #         # Fixed offset strategy
+    #         return np.array([0.6, 0.4, 0.0])
+    #     else:
+    #         # Proportional strategy for the two waypoints that are affected by obstacle 2 change
+    #         delta = new_pos - old_pos
+    #         if target == "b3_1.0":
+    #             return np.array([delta[0] * 1.0, delta[1] * 1.0, 0.0])
+    #         elif target == "b3_1.1":
+    #             return np.array([delta[0] * 0.8, delta[1] * 0.8, 0.0])
+    #         else:
+    #             return np.array([0.0, 0.0, 0.0])
 
     def _apply_unified_response(self, trigger_id: str, new_pos: np.ndarray, old_pos: np.ndarray):
         """Apply unified response mapping for any trigger (gate or obstacle change)."""
@@ -873,7 +934,7 @@ class MPController(Controller):
                 if gate_idx in self.orthogonal_indices:
                     if direction in self.orthogonal_indices[gate_idx]:
                         wp_idx = self.orthogonal_indices[gate_idx][direction]
-                        if 0 <= wp_idx < len(self.waypoints):
+                        if wp_idx is not None and 0 <= wp_idx < len(self.waypoints):
                             # Update orthogonal waypoint with new gate position + orthogonal offset
                             new_gate_pos = new_pos
                             gate_quat = self._info.get("gates_quat", [None, None, None, None])[gate_idx]
@@ -888,18 +949,33 @@ class MPController(Controller):
                             trajectory_updated = True
                             
             elif target.startswith("b"):  # Block waypoint target
-                # Parse "b2.1" -> block=2, waypoint_in_block=1
-                parts = target[1:].split(".")
-                block_idx = int(parts[0])
+                # Parse "b2.0" or "b3_1.0" -> section_name, waypoint_in_block
+                parts = target.split(".")
+                section_name = parts[0]
                 wp_in_block = int(parts[1])
                 
-                if block_idx in self.waypoint_blocks:
-                    if wp_in_block < len(self.waypoint_blocks[block_idx]):
-                        wp_idx = self.waypoint_blocks[block_idx][wp_in_block]
+                if section_name in self.waypoint_blocks:
+                    if wp_in_block < len(self.waypoint_blocks[section_name]):
+                        wp_idx = self.waypoint_blocks[section_name][wp_in_block]
                         if 0 <= wp_idx < len(self.waypoints):
                             self.waypoints[wp_idx] += response_delta
                             trajectory_updated = True
-        
+        # if trigger_id == "o2":
+        #     # Special handling for obstacle 2
+        #     for target in ["b3_1.0", "b3_1.1"]:
+        #         response_delta = self._calculate_obstacle2_offset(new_pos, old_pos, target)
+                
+        #         parts = target.split(".")
+        #         section_name = parts[0]
+        #         wp_in_block = int(parts[1])
+                
+        #         if section_name in self.waypoint_blocks:
+        #             if wp_in_block < len(self.waypoint_blocks[section_name]):
+        #                 wp_idx = self.waypoint_blocks[section_name][wp_in_block]
+        #                 if 0 <= wp_idx < len(self.waypoints):
+        #                     self.waypoints[wp_idx] += response_delta
+        #             trajectory_updated = True
+
         # Rebuild splines if any waypoint was updated
         if trajectory_updated:
             ts = np.linspace(0, 1, len(self.waypoints))
@@ -933,10 +1009,10 @@ class MPController(Controller):
         """
         # Start with the base weight (default cost away from gates)
         w = self.base_weight
-        # Loop over all gates and their associated peak weights
-        for gate_theta, peak_weight in zip(self.gate_thetas, self.gate_peak_weights):
+        # Loop over all gates with their individual sigmas and peak weights
+        for gate_theta, peak_weight, sigma in zip(self.gate_thetas, self.gate_peak_weights, self.gate_sigmas):
             # Compute the normalized distance from the current theta to the gate's theta
-            diff = (theta - gate_theta) / self.sigma  # self.sigma controls the width of the peak
+            diff = (theta - gate_theta) / sigma  # self.sigma controls the width of the peak
             # Compute the Gaussian-shaped influence of this gate
             gate_influence = (peak_weight - self.base_weight) * np.exp(-0.5 * diff * diff)
             # The weight at this theta is the maximum of the base weight and all gate influences

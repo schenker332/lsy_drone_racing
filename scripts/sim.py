@@ -73,10 +73,10 @@ def simulate(
         track=config.env.track,
         disturbances=config.env.get("disturbances"),
         randomizations=config.env.get("randomizations"),
-        seed=int(time.time()) % 100000,
+        seed=config.env.seed, 
     )
     env = JaxToNumpy(env)
-
+ #use this if everything shall be more randomized int(time.time()) % 100000
 
     ep_times = []
     try:
@@ -109,7 +109,7 @@ def simulate(
                 if terminated or truncated or controller_finished:
                     break
                 i += 1
-
+            print(f"Drone mass - Default: {default_mass}, Deviation: {mass_deviation}, Total: {current_mass}")
             controller.episode_callback(curr_time)  # Update the controller internal state and models.
             log_episode_stats(obs, info, config, curr_time)
             controller.episode_reset()

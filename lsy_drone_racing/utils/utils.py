@@ -547,12 +547,12 @@ def visualize_cost_weights(env, controller):
 
             # Proportional sphere size: max_weight=300 -> size=0.04
             sphere_size =  0.03 * (max_weight_int / 150)
-            marker_color = np.array([1.0, 0.5, 0.0, 1.0])  # Orange for visibility
+            marker_color = np.array([1.0, 0.5, 0.0, 0.3])  # Orange for visibility
 
             draw_point(env, text_pos, size=sphere_size, rgba=marker_color)
-            print(f"Max Weight: {max_weight_int} (sphere size: {sphere_size:.3f})")
 
         
         bars_drawn += 1
-    
-    print(f"Total MPC horizon bars drawn: {bars_drawn}")
+
+    ### For Debugging
+    # print(f"Total MPC horizon bars drawn: {bars_drawn}")

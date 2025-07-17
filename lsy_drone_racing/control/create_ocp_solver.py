@@ -59,7 +59,6 @@ def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosO
 
     # The contouring error weight is set as an online parameter in the model/controller
     theta_spec_cont_weight = p[6]
-    theta_spec_cont_weight
 
     # --- Control Input Cost ---
     # Weights for the control inputs to penalize excessive commands
