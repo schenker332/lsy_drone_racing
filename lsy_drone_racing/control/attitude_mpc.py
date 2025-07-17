@@ -12,9 +12,10 @@ from lsy_drone_racing.control.helper.datalogger import DataLogger
 from datetime import datetime
 
 
+# Sigma defines how much we stretch the Peak weights at each gate
 GATE_WEIGHT_CONFIG = {
-    0: {"peak_weight": 35, "sigma": 0.04},   # Gate 0: narrow peak
-    1: {"peak_weight": 50, "sigma": 0.02}, # Gate 1: wider peak  
+    0: {"peak_weight": 35, "sigma": 0.04},  # Gate 0: narrow peak
+    1: {"peak_weight": 50, "sigma": 0.02},  # Gate 1: wider peak
     2: {"peak_weight": 60, "sigma": 0.08},  # Gate 2: narrow peak
     3: {"peak_weight": 120, "sigma": 0.04}  # Gate 3: very narrow, high peak
 }
@@ -37,15 +38,23 @@ class MPController(Controller):
         ### =========================== Waypoints ================================ ###
         ### ====================================================================== ###
 
-        # Gate-Positionen
+        # Gate-Posittions better for simulation
         gates = np.array([
             [0.45, -0.50, 0.56],  # Gate 0      [0.45, -0.5, 0.56]
-            [1.0, -1.05, 1.2],   # Gate 1      [1.0, -1.05, 1.11]
-            [0.05, 1.0, 0.66],     # Gate 2      [0.0, 1.0, 0.56]
+            [1.0, -1.05, 1.2],    # Gate 1      [1.0, -1.05, 1.11]
+            [-0.04, 1.0, 0.59],   # Gate 2      [0.0, 1.0, 0.56]
             [-0.5, 0.0, 1.11]     # Gate 3      [-0.5, 0.0, 1.11]
         ])
         
-        # Start bis Gate 0
+        # #Gate-Positions better for real world deployment
+        # gates = np.array([
+        #     [0.45, -0.50, 0.56],  
+        #     [1.0, -1.05, 1.2],   
+        #     [0.04, 1.0, 0.66],    
+        #     [-0.5, 0.0, 1.11]    
+        # ])
+        
+        # Start to Gate 0
         b0 = np.array([
             [1.0, 1.5, 0.2],
             [0.8, 1.0, 0.2],
@@ -72,7 +81,7 @@ class MPController(Controller):
             # [-0.75, 0.5, 1.11]   
         ])
         
-        # nach Gate 3 
+        # after Gate 3 
         b4 = np.array([
             [-0.1, -1, 1.2]
         ])
@@ -143,6 +152,8 @@ class MPController(Controller):
             ("b1.2", 1.0, 1.0, 0.0, [0.0, 0.0, 0.0]),  # Block 1, Waypoint 2
             ],
 
+            #add reaction to obstacle 2 from top of tree ?
+
             "o3": [  # Wenn sich Obstacle 3 ändert
             ("b3.2", 2.0, 2.0, 0.0, [0.0, 0.0, 0.0]),  # Block 3, Waypoint 2 (at obstacle 4)
             ],
@@ -196,14 +207,12 @@ class MPController(Controller):
         self.gate_peak_weights = [GATE_WEIGHT_CONFIG[i]["peak_weight"] for i in range(4)]
         self.gate_sigmas = [GATE_WEIGHT_CONFIG[i]["sigma"] for i in range(4)]
 
-        # self.gate_peak_weights = [35, 50, 60, 120] 
 
 
         # Create the optimal control problem solver
         self.acados_ocp_solver, self.ocp = create_ocp_solver(self.T_HORIZON, self.N)
 
-        self.base_weight = 20
-        self.sigma       = 0.05     
+        self.base_weight = 20   
         
         ### ========== logger ==========================
         self._log_every = 1

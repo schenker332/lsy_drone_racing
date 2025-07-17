@@ -48,7 +48,12 @@ def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosO
     q_l = 60 # lag error
     mu = 0.008  # progress 0.0015 
     q_min = p[6]  # gaussian weight
-    max_v_theta = 0.14  # maximum progress velocity
+
+    # # Maximum progress velocity for real world deployment, flies stable in real about 6/10 in sim
+    # max_v_theta = 0.14  # maximum progress velocity
+    # Maximum progress velocity for simulation, flies stable in sim about 8/10
+    max_v_theta = 0.13  # maximum progress velocity
+    
     dv_theta_max = 0.35  # maximum progress acceleration
 
 
