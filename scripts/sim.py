@@ -90,25 +90,17 @@ def simulate(
     try:
         for _ in range(n_runs):  # Run n_runs episodes with the controller
             obs, info = env.reset()
-            controller: Controller = controller_cls(obs, info, config)
+            default_mass = env.unwrapped.drone_mass  # Standard-Masse
+            current_mass = env.unwrapped.sim.data.params.mass  # Randomisierte Masse
+            mass_deviation = current_mass - default_mass  # Abweichung
+            print(f"Drone mass - Default: {default_mass}, Deviation: {mass_deviation}, Total: {current_mass}")
 
-    #===========================================================================================
-            # --- Get the planned path from the controller ---
-            all_trajectories = [controller.get_trajectory()]
-            
-            # --- Prepare storage for the actually flown path ---
-            flown_positions: list[np.ndarray] = []
-            
-            # --- Zur Erkennung von Gate-Positionsänderungen ---
-            last_gates_positions = {}  # Dictionary mit gate_id: position zur Speicherung der letzten bekannten Positionen
-            gate_update_points = []  # Liste für die Positionen, an denen Gate-Positionsänderungen erkannt wurden
-            
-            # --- Zur Erkennung von Obstacle-Positionsänderungen ---
-            last_obstacles_positions = {}  # Dictionary mit obstacle_idx: position zur Speicherung der letzten bekannten Positionen
-            obstacle_update_points = []  # Liste für die Positionen, an denen Obstacle-Positionsänderungen erkannt wurden
-    #==========================================================================================
+            controller: Controller = controller_cls(obs, info, config)
+            visualizer = SimVisualizer()
+
+
             i = 0
-            fps = 60
+
 
             env.unwrapped.sim.max_visual_geom = 5_000
 
@@ -173,7 +165,7 @@ def simulate(
                 # Update the controller internal state and models.
                 controller_finished = controller.step_callback(action, obs, reward, terminated, truncated, info)
                 # Update and visualize the simulation
-                SimVisualizer.update_visualization(env, obs, controller, config, all_trajectories, flown_positions, last_gates_positions, gate_update_points, last_obstacles_positions, obstacle_update_points)
+                visualizer.update_visualization(env, obs, controller)
                 if config.sim.gui:
                     env.render()
                 if terminated or truncated or controller_finished:
@@ -186,6 +178,7 @@ def simulate(
             controller.episode_callback(curr_time)  # Update the controller internal state and models.
             log_episode_stats(obs, info, config, curr_time)
             controller.episode_reset()
+            visualizer.reset_episode()  # Reset visualizer for next episode
             ep_times.append(curr_time if obs["target_gate"] == -1 else None)
 
 

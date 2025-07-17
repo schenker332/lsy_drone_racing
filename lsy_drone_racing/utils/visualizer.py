@@ -13,199 +13,72 @@ class SimVisualizer:
     including drone trajectories, gates, obstacles, and planning horizons.
     """
 
-    @staticmethod
-    def update_visualization(env, obs, controller, config, all_trajectories, flown_positions, 
-                          last_gates_positions, gate_update_points,
-                          last_obstacles_positions, obstacle_update_points):
+    def __init__(self):
+        """Initialize the visualizer with tracking variables."""
+        self.flown_positions = []
+        self.last_gates_positions = {}
+        self.gate_update_points = []
+        self.last_obstacles_positions = {}
+        self.obstacle_update_points = []
+
+    def reset_episode(self):
+        """Reset tracking variables for a new episode."""
+        self.flown_positions = []
+        self.last_gates_positions = {}
+        self.gate_update_points = []
+        self.last_obstacles_positions = {}
+        self.obstacle_update_points = []
+
+
+    def update_visualization(self, env, obs, controller):
         """Update data and visualize the simulation.
         
         Args:
             env: The simulation environment
             obs: Current observation
             controller: The drone controller
-            config: Configuration object
-            all_trajectories: List of all planned trajectories
-            flown_positions: List of actual drone positions
-            last_gates_positions: Dictionary of last known gate positions
-            gate_update_points: List of positions where gates were updated
-            last_obstacles_positions: Dictionary of last known obstacle positions
-            obstacle_update_points: List of positions where obstacles were updated
         """
-        from lsy_drone_racing.utils import  draw_gates, draw_point, draw_obstacles, generate_parallel_lines,draw_line
+        from lsy_drone_racing.utils import  draw_gates, draw_point, draw_obstacles,draw_line
         
         # Record current drone position (ground truth state)
-        flown_positions.append(obs["pos"])
-
-        # Visualisiere den aktuellen theta-Referenzpunkt als Ball auf der Trajektorie
-        theta = controller.theta
-        ref_x = controller.cs_x(theta)
-        ref_y = controller.cs_y(theta)
-        ref_z = controller.cs_z(theta)
-        ref_point = np.array([ref_x, ref_y, ref_z])
-
-        theta_next = theta + 0.0001
-        next_x = controller.cs_x(theta_next)
-        next_y = controller.cs_y(theta_next)
-        next_z = controller.cs_z(theta_next)
-        next_point = np.array([next_x, next_y, next_z])
-
-        
-        # Zeichne einen auffälligen Ball an der Referenzposition
-        draw_point(env, ref_point, 
-                    size=0.01,  # Größerer Ball für bessere Sichtbarkeit
-                    rgba=np.array([1.0, 1.0, 0.0, 0.8]))  # Gelb
-        
-
-
-        
-        # Berechne Tangentenvektor t_hat
-        tangent = next_point - ref_point
-        t_hat = tangent / (np.linalg.norm(tangent) + 1e-10)
-        
-        # Aktuelle Drohnenposition
         drone_pos = obs["pos"]
-        
-        # Fehlervektor e = pos - ref
-        e_vec = drone_pos - ref_point
-        
-        # Berechne Contour Error (e_c) und Lag Error (e_l)
-        e_l_scalar = np.dot(t_hat, e_vec)  # Projektion auf Tangente
-        e_l_vec = e_l_scalar * t_hat        # Vektor in Tangentenrichtung
-        e_c_vec = e_vec - e_l_vec           # Orthogonaler Vektor
-        
-        # Skaliere Vektoren für bessere Visualisierung
-        scale_factor = 1
-        t_hat_scaled = ref_point + t_hat * scale_factor
-        e_l_vis = ref_point + e_l_vec
-        e_c_vis = ref_point + e_c_vec
-        
-        # Zeichne den Tangentenvektor (blau)
-        draw_line(env, np.vstack([ref_point, t_hat_scaled]),
-                rgba=np.array([0.0, 0.0, 1.0, 1.0]),  # Blau
-                min_size=2.0, max_size=2.0)
-        
-        # Zeichne den Fehlervektor e (rot)
-        draw_line(env, np.vstack([ref_point, drone_pos]),
-                rgba=np.array([1.0, 0.0, 0.0, 1.0]),  # Rot
-                min_size=2.0, max_size=2.0)
-        
-        # Zeichne den Contour Error Vektor e_c (grün)
-        draw_line(env, np.vstack([ref_point, e_c_vis]),
-                rgba=np.array([0.0, 1.0, 0.0, 1.0]),  # Grün
-                min_size=2.0, max_size=2.0)
-        
-        # Zeichne den Lag Error Vektor e_l (magenta)
-        draw_line(env, np.vstack([ref_point, e_l_vis]),
-                rgba=np.array([1.0, 0.0, 1.0, 1.0]),  # Magenta
-                min_size=2.0, max_size=2.0)
+        self.flown_positions.append(drone_pos)
+        trajectories = controller.get_trajectory()
+        _,min_traj_pos,_ = controller.compute_min_distance_to_trajectory(drone_pos)
+        vis_data = controller.get_visualization_data(drone_pos)
+
+
+        # Extract data for easier access
+        ref_point = vis_data['ref_point']
+        t_hat_scaled = vis_data['t_hat_scaled']
+        e_c_vis = vis_data['e_c_vis']
+        e_l_vis = vis_data['e_l_vis']
+                
+
+        # # Draw all trajectories except the last one
+        # if trajectories and len(trajectories) > 1:
+        #     [draw_line(env, traj, rgba=np.array([0.5, 0.8, 0.5, 0.3]), min_size=1.0, max_size=1.0) for traj in trajectories[:-1]]
+        # Draw last trajectory
+        if trajectories:
+            draw_line(env, trajectories[-1], rgba=np.array([0.0, 1.0, 0.0, 1.0]), min_size=2.5, max_size=2.5)
 
 
 
+        # Draw flown path
+        if len(self.flown_positions) >= 2:
+            fp = np.vstack(self.flown_positions)
+            draw_line(env, fp, rgba=np.array([1.0, 0.0, 0.0, 1.0]), min_size=1.5, max_size=1.5)
 
-        min_distance, min_traj_pos, theta = controller.compute_min_distance_to_trajectory(drone_pos)
-        
-        # Zeichne den Punkt auf der Trajektorie, der den minimalen Abstand hat
-        draw_point(env, min_traj_pos, 
-                size=0.01,  # Größe des Punktes
-                rgba=np.array([1.0, 0.5, 0.0, 0.8]))  # Orange
-        
-        # Zeichne eine Linie vom Drohnenpunkt zum nächsten Punkt (orange)
-        draw_line(env, np.vstack([drone_pos, min_traj_pos]),
-                rgba=np.array([1.0, 0.5, 0.0, 1.0]),  # Orange
-                min_size=2.0, max_size=2.0)
-
+        # # Draw planning horizon
+        # prediction_horizon_points = None
+        # full_horizon = controller.get_prediction_horizon()
+        # prediction_horizon_points = full_horizon[::3]  # Take only every third point
+        # if prediction_horizon_points is not None and len(prediction_horizon_points) >= 2:
+        #     draw_line(env, prediction_horizon_points, rgba=np.array([0.0, 0.8, 1.0, 1.0]), min_size=2.5, max_size=2.5)
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        
-        # Check if gate positions have changed
-        if "gates_pos" in obs:
-            gates_pos = obs["gates_pos"]
-            for gate_idx, gate_pos in enumerate(gates_pos):
-                if gate_idx not in last_gates_positions or not np.array_equal(gate_pos, last_gates_positions[gate_idx]):
-                    # A gate position has changed or is observed for the first time
-                    gate_update_points.append(obs["pos"])
-                    last_gates_positions[gate_idx] = gate_pos.copy()  # Store a copy of the position
-        
-        # Check if obstacle positions have changed
-        if "obstacles_pos" in obs:
-            obstacles_pos = obs["obstacles_pos"]
-            for obs_idx, obs_pos in enumerate(obstacles_pos):
-                if obs_idx not in last_obstacles_positions or not np.array_equal(obs_pos, last_obstacles_positions[obs_idx]):
-                    # An obstacle was observed for the first time or has changed position
-                    obstacle_update_points.append(obs["pos"])
-                    last_obstacles_positions[obs_idx] = obs_pos.copy()  # Store a copy of the position
-        
-        # Update the planning horizon (predicted positions)
-        prediction_horizon_points = None
-        try:
-            # Get the planning horizon and use only every third point to save computational resources
-            full_horizon = controller.get_prediction_horizon()
-            prediction_horizon_points = full_horizon[::3]  # Take only every third point
-        except Exception as e:
-            # If the method is not implemented or an error occurs
-            pass
-            
-        # Draw both the planned path and the flown path every frame
-
-        #Draw all previous trajectories with faded colors
-        for i, traj in enumerate(all_trajectories[:-1]):
-            # Light green with decreasing transparency for older trajectories
-            alpha = 0.3 + 0.5 * (i / max(1, len(all_trajectories) - 1))
-            draw_line(env, traj,
-                    rgba=np.array([0.5, 0.8, 0.5, alpha]),  # Light green with alpha
-                    min_size=1.5, max_size=1.5)
-        
-        # Current planned trajectory: strong green, thickness 2
-        if all_trajectories:
-            draw_line(env, all_trajectories[-1],
-                    rgba=np.array([0.0, 1.0, 0.0, 1.0]),  # Strong green
-                    min_size=2.0, max_size=2.0)
-
-        # Visualize the planning horizon: cyan/light blue, thicker line
-        if prediction_horizon_points is not None and len(prediction_horizon_points) >= 2:
-            draw_line(env, prediction_horizon_points,
-                    rgba=np.array([0.0, 0.8, 1.0, 1.0]),  # Cyan/light blue
-                    min_size=2.5, max_size=2.5)  # Slightly thicker than the path
-
-        # Actual flown path: red, thickness 1.5
-        if len(flown_positions) >= 2:
-            fp = np.vstack(flown_positions)
-            draw_line(env, fp,
-                    rgba=np.array([1.0, 0.0, 0.0, 1.0]),
-                    min_size=1.5, max_size=1.5)
-                    
-        # Draw gate update points as light blue spheres
-        for update_point in gate_update_points:
-            draw_point(env, update_point, 
-                    size=0.03,  # Larger sphere for better visibility
-                    rgba=np.array([0.0, 0.7, 1.0, 1.0]))  # Light blue
-        
-        # Draw obstacle update points as skin-colored spheres
-        for update_point in obstacle_update_points:
-            draw_point(env, update_point, 
-                    size=0.03,  # Larger sphere for better visibility
-                    rgba=np.array([0.94, 0.78, 0.67, 1.0]))  # Skin color
-        
-        # Draw gates with position and orientation
+        # Draw gates
         if "gates_pos" in obs and "gates_quat" in obs:
             # Draw all gates with their current positions and orientations
             draw_gates(env, 
@@ -228,25 +101,67 @@ class SimVisualizer:
                         rgba=np.array([0.94, 0.78, 0.67, 0.5]))  # Semi-transparent skin color
             
 
-            # # Draw constraint visualization (tube) only around the relevant part of trajectory
-            # # This visualization shows safety boundaries around the prediction horizon
-            # if all_trajectories and prediction_horizon_points is not None:
-            #     # Current position of the drone
-            #     current_pos = obs["pos"]
-                
-            #     # Find the closest point on the trajectory to the current drone position
-            #     traj = np.array(all_trajectories[-1])
-            #     distances = np.linalg.norm(traj - current_pos, axis=1)
-            #     closest_idx = np.argmin(distances)
-                
-            #     # Extract the part of the trajectory that corresponds to the prediction horizon
-            #     # (from the current position to the length of the horizon)
-            #     horizon_length = len(prediction_horizon_points)
-            #     end_idx = min(closest_idx + horizon_length, len(traj))
-            #     horizon_traj = traj[closest_idx:end_idx]
-                
-            #     # Draw constraints only around this part of the trajectory
-            #     if len(horizon_traj) > 1:  # At least 2 points needed
-            #         tube_lines = generate_parallel_lines(horizon_traj, radius=0.25, num_lines=20)
-            #         for line in tube_lines:
-            #             draw_line(env, line, rgba=np.array([0.8, 0.8, 0.0, 0.7]), min_size=1.0, max_size=1.0)
+        # # Check if gate positions have changed
+        # if "gates_pos" in obs:
+        #     gates_pos = obs["gates_pos"]
+        #     for gate_idx, gate_pos in enumerate(gates_pos):
+        #         if gate_idx not in self.last_gates_positions or not np.array_equal(gate_pos, self.last_gates_positions[gate_idx]):
+        #             # A gate position has changed or is observed for the first time
+        #             self.gate_update_points.append(obs["pos"])
+        #             self.last_gates_positions[gate_idx] = gate_pos.copy()  # Store a copy of the position
+
+        # # Draw gate update points 
+        # for update_point in self.gate_update_points:
+        #     draw_point(env, update_point, size=0.03, rgba=np.array([0.0, 0.7, 1.0, 1.0]))
+
+        
+        # # Check if obstacle positions have changed
+        # if "obstacles_pos" in obs:
+        #     obstacles_pos = obs["obstacles_pos"]
+        #     for obs_idx, obs_pos in enumerate(obstacles_pos):
+        #         if obs_idx not in self.last_obstacles_positions or not np.array_equal(obs_pos, self.last_obstacles_positions[obs_idx]):
+        #             # An obstacle was observed for the first time or has changed position
+        #             self.obstacle_update_points.append(obs["pos"])
+        #             self.last_obstacles_positions[obs_idx] = obs_pos.copy()  # Store a copy of the position
+        
+        # # Draw obstacle update points
+        # for update_point in self.obstacle_update_points:
+        #     draw_point(env, update_point, size=0.03, rgba=np.array([0.94, 0.78, 0.67, 1.0]))
+
+
+        draw_point(env, ref_point, size=0.02, rgba=np.array([1.0, 1.0, 0.0, 0.8]))  # Referenzpunkt (gelb)
+        # draw_line(env, np.vstack([ref_point, t_hat_scaled]), rgba=np.array([0.0, 0.0, 1.0, 1.0]), min_size=2.0, max_size=2.0)  # Tangentenvektor (blau)
+        # draw_line(env, np.vstack([ref_point, drone_pos]), rgba=np.array([1.0, 0.0, 0.0, 1.0]), min_size=2.0, max_size=2.0)  # Fehlervektor e (rot)
+        # draw_line(env, np.vstack([ref_point, e_c_vis]), rgba=np.array([0.0, 1.0, 0.0, 1.0]), min_size=2.0, max_size=2.0)  # Contour Error (grün)
+        # draw_line(env, np.vstack([ref_point, e_l_vis]), rgba=np.array([1.0, 0.0, 1.0, 1.0]), min_size=2.0, max_size=2.0)  # Lag Error (magenta)
+
+
+        
+        # # Draw line and point for minimum trajectory position
+        # draw_line(env, np.vstack([drone_pos, min_traj_pos]), rgba=np.array([1.0, 0.5, 0.0, 1.0]), min_size=2.0, max_size=2.0)
+        # draw_point(env, min_traj_pos, size=0.01, rgba=np.array([1.0, 0.5, 0.0, 0.8]))
+
+        
+
+ # Draw waypoints
+        waypoint_info = controller.get_waypoints()
+        waypoints = waypoint_info['waypoints']
+        gate_indices = waypoint_info['gate_indices']
+        
+        # Draw normal waypoints (small blue points)
+        for i, wp in enumerate(waypoints):
+            if i not in gate_indices:  # Only draw non-gate waypoints
+                draw_point(env, wp, size=0.02, rgba=np.array([0.0, 0.0, 1.0, 0.7]))  # Blue
+        
+        # Draw gate waypoints (larger red points)
+        for gate_idx in gate_indices:
+            if gate_idx < len(waypoints):
+                draw_point(env, waypoints[gate_idx], size=0.03, rgba=np.array([1.0, 0.0, 0.0, 0.9]))  # Red
+
+        # stage, near = controller.get_stage_vs_nearest()
+        # for p, q in zip(stage, near):   # alle Schritte zeigen
+        #     draw_line(env, np.vstack((p,q)),
+        #             rgba=np.array([1,0.5,0,0.6]), min_size=1.5, max_size=1.5)
+        #     draw_point(env, p, size=0.012, rgba=np.array([0,0.5,1,0.8]))
+        #     draw_point(env, q, size=0.012, rgba=np.array([1,0.5,0,0.8]))
+
