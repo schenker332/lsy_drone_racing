@@ -210,7 +210,7 @@ class MPController(Controller):
         # Create the optimal control problem solver
         self.acados_ocp_solver, self.ocp = create_ocp_solver(self.T_HORIZON, self.N)
 
-        self.base_weight = 20   
+        self.base_weight = 70   
         
         ### ========== logger ==========================
         self._log_every = 1
@@ -362,22 +362,22 @@ class MPController(Controller):
 
     #     return traj_points
         
-    # def get_prediction_horizon(self) -> NDArray[np.floating]:
-    #     """Get the predicted position trajectory for the planning horizon.
+    def get_prediction_horizon(self) -> NDArray[np.floating]:
+        """Get the predicted position trajectory for the planning horizon.
         
-    #     Returns:
-    #         Array of shape (N, 3) containing the predicted x,y,z positions
-    #         for the next N timesteps in the planning horizon.
-    #     """
-    #     # Collect predicted states for all steps in the horizon
-    #     horizon_positions = []
-    #     for i in range(self.N):
-    #         state = self.acados_ocp_solver.get(i, "x")
-    #         # First three elements of the state are x,y,z positions
-    #         pos = state[:3]
-    #         horizon_positions.append(pos)
+        Returns:
+            Array of shape (N, 3) containing the predicted x,y,z positions
+            for the next N timesteps in the planning horizon.
+        """
+        # Collect predicted states for all steps in the horizon
+        horizon_positions = []
+        for i in range(self.N):
+            state = self.acados_ocp_solver.get(i, "x")
+            # First three elements of the state are x,y,z positions
+            pos = state[:3]
+            horizon_positions.append(pos)
         
-    #     return np.array(horizon_positions)
+        return np.array(horizon_positions)
     
 
 
