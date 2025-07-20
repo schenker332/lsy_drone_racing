@@ -126,7 +126,7 @@ def simulate(
                         for t, x in run_log:
                             writer.writerow([t, *x])
                 else:
-                    logger.warning("Kein xcurrent‑Log für diesen Run gesammelt.")
+                    pass
                                 # ========== Gate/Obstacle Snapshot ==========
                 g_pos  = obs["gates_pos"].flatten()
                 g_quat = obs["gates_quat"].flatten()

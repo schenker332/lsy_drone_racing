@@ -97,7 +97,7 @@ def main(config: str = "level2.toml", controller: str | None = None):
                     for t, x in run_log:
                         writer.writerow([t, *x])
             else:
-                logger.warning("Kein xcurrent‑Log für diesen Run gesammelt.")
+                pass
 
             # ========== Gate/Obstacle Snapshot ==========
             g_pos  = obs["gates_pos"].flatten()
