@@ -30,6 +30,18 @@ logger = logging.getLogger(__name__)
 import warnings
 warnings.filterwarnings("ignore", message="Explicitly requested dtype float64.*")
 
+from datetime import datetime
+import os
+import csv
+
+# --------------------------------------------------------------
+timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+batch_dir = Path("logs") / f"batch_{timestamp}"
+batch_dir.mkdir(parents=True, exist_ok=True)
+
+run_stats = []          # hier sammeln wir später Zeit + Gates pro Run
+successful_times = []   # für die Erfolgs‑Durchschnittszeit
+# --------------------------------------------------------------
 
 
 
@@ -81,13 +93,31 @@ def simulate(
 
     ep_times = []
     try:
-        for _ in range(n_runs):  # Run n_runs episodes with the controller
+        for run_idx in range(1, n_runs + 1):          # ← jetzt mit Index
+            # eigenen Unterordner für diesen Durchlauf anlegen
+            run_dir = batch_dir / f"run_{run_idx}"
+            run_dir.mkdir(exist_ok=True)
+
+            
             obs, info = env.reset()
             default_mass = env.unwrapped.drone_mass  # Standard-Masse
             current_mass = env.unwrapped.sim.data.params.mass  # Randomisierte Masse
             mass_deviation = current_mass - default_mass  # Abweichung
             print(f"Drone mass - Default: {default_mass}, Deviation: {mass_deviation}, Total: {current_mass}")
             controller: Controller = controller_cls(obs, info, config)
+
+            # Falls der Controller einen Logger besitzt: Pfade anpassen
+            if getattr(controller, "logger", None):
+                logger = controller.logger
+                logger.run_dir = str(run_dir)
+                logger.state_log_file = run_dir / "state_log.csv"
+                logger.control_log_file = run_dir / "control_log.csv"
+                logger.gates_log_file = run_dir / "final_gates.csv"
+                logger.obstacles_log_file = run_dir / "final_obstacles.csv"
+                # Header der neuen Dateien anlegen
+                logger._prepare_state_log()
+                logger._prepare_control_log()
+
             visualizer = SimVisualizer()
             i = 0
 
@@ -115,7 +145,40 @@ def simulate(
             log_episode_stats(obs, info, config, curr_time)
             controller.episode_reset()
             visualizer.reset_episode()  # Reset visualizer for next episode
-            ep_times.append(curr_time if obs["target_gate"] == -1 else None)
+            ep_times.append(curr_time if obs["target_gate"] == -1 else None) 
+
+
+            # Wenn Episode fertig:
+            gates_passed = obs["target_gate"]
+            if gates_passed == -1:
+                gates_passed = len(config.env.track.gates)
+
+            run_stats.append({"run": run_idx,
+                            "time": curr_time,
+                            "gates_passed": gates_passed})
+
+            if gates_passed == len(config.env.track.gates):
+                successful_times.append(curr_time)
+
+        # --------------------------------------------------------------
+        summary_file = batch_dir / "summary.csv"
+        with open(summary_file, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["run", "time_sec", "gates_passed"])
+
+            for row in run_stats:
+                writer.writerow([row["run"], f"{row['time']:.3f}", row["gates_passed"]])
+
+            # Aggregierte Kennzahlen
+            successful_runs = len(successful_times)
+            avg_time = (sum(successful_times) / successful_runs) if successful_runs else None
+
+            writer.writerow([])  # Leerzeile als Trenner
+            writer.writerow(["successful_runs", successful_runs])
+            writer.writerow(["avg_time_successful", f"{avg_time:.3f}" if avg_time else "n/a"])
+        # --------------------------------------------------------------
+
+
 
 
 

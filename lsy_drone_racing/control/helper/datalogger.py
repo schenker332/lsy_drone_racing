@@ -4,22 +4,12 @@ from datetime import datetime
 import numpy as np
 
 class DataLogger:
-    def __init__(self, log_dir="logs"):
+    def __init__(self):
         """Initializes the logger, creating a unique directory for the current run."""
-        # Create a timestamped directory for the current run
-        current_time = datetime.now().strftime('%Y%m%d_%H%M%S')
-        self.run_dir = os.path.join(log_dir, f"run_{current_time}")
-        os.makedirs(self.run_dir, exist_ok=True)
 
-        # Define file paths
-        self.state_log_file = os.path.join(self.run_dir, "state_log.csv")
-        self.control_log_file = os.path.join(self.run_dir, "control_log.csv")
-        self.gates_log_file = os.path.join(self.run_dir, "final_gates.csv")
-        self.obstacles_log_file = os.path.join(self.run_dir, "final_obstacles.csv")
 
-        # Prepare the log files with headers
-        self._prepare_state_log()
-        self._prepare_control_log()
+
+
 
     def _prepare_state_log(self):
         """Opens the state log CSV and writes the header row."""

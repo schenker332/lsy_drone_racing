@@ -174,7 +174,7 @@ class MPController(Controller):
         self.logging_enabled = True
         if  self.logging_enabled:
             # Initialize logger
-            self.logger = DataLogger(log_dir="logs")
+            self.logger = DataLogger()
             self._last_log_time = -1
         else:
             self.logger = None
@@ -200,7 +200,7 @@ class MPController(Controller):
 
 
         self.theta = 0
-        t= 4.7
+        t= 4.3
         self.v_theta = 1/ (t * self.dt * self.freq) 
 
         dx   = self.cs_x.derivative(1)
