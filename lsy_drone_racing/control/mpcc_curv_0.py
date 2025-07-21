@@ -6,7 +6,7 @@ from scipy.spatial.transform import Rotation as R
 
 from lsy_drone_racing.control import Controller
 
-from lsy_drone_racing.control.create_ocp_solver import create_ocp_solver
+from lsy_drone_racing.control.mpcc_curv_0_utils.mpcc_curv_0_ocp_solver import create_ocp_solver
 from lsy_drone_racing.control.helper.datalogger import DataLogger
 import pathlib
 import subprocess
@@ -100,7 +100,7 @@ class MPController(Controller):
         ### Original Gate-Positions
         gates = np.array([
             [0.45, -0.5, 0.56],     # Gate 0      
-            [1.0, -1.05, 1.11],     # Gate 1     
+            [1.0, -1.05, 1.25],     # Gate 1     
             [0.0, 1.0, 0.56],       # Gate 2      
             [-0.5, 0.0, 1.2]       # Gate 3     
         ]) 
@@ -110,7 +110,7 @@ class MPController(Controller):
 
         for gate_idx in range(4):
             gate_wp_config = GATE_ORTHOGONAL_CONFIG[gate_idx]
-            gate_pos = obs["gates_pos"][gate_idx]
+            gate_pos = gates[gate_idx]
             gate_quat = obs["gates_quat"][gate_idx]
             
             before_wp = None
@@ -483,9 +483,9 @@ class MPController(Controller):
                 
                 # Get current weight (this is what gets stored in p[6])
                 current_weight = self.weight_for_theta(self.theta)
-                
-                # Use existing get_visualization_data function for error calculation
-                vis_data = self.get_visualization_data(obs["pos"])
+
+                # Use existing get_contour_lag_error function for error calculation
+                vis_data = self.get_contour_lag_error(obs["pos"])
                 e_contour_magnitude = np.linalg.norm(vis_data['e_c_vec'])
                 e_lag_magnitude = abs(vis_data['e_l_scalar'])
                 
@@ -661,7 +661,7 @@ class MPController(Controller):
 
 
     
-    def get_visualization_data(self, drone_pos):
+    def get_contour_lag_error(self, drone_pos):
         """Calculate visualization data for plotting error vectors and reference points.
         
         Args:

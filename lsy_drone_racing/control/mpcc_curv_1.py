@@ -6,21 +6,23 @@ from scipy.spatial.transform import Rotation as R
 from lsy_drone_racing.control import Controller
 if TYPE_CHECKING:
     from numpy.typing import NDArray
-from lsy_drone_racing.control.mpcc_progress_utils.mpcc_progress_ocp_solver import create_ocp_solver
+from lsy_drone_racing.control.mpcc_curv_1_utils.mpcc_curv_1_ocp_solver import create_ocp_solver
 from lsy_drone_racing.control.helper.print_output import print_output
 from lsy_drone_racing.control.helper.datalogger import DataLogger
-from datetime import datetime
+import pathlib
+import subprocess
+import sys
 
 
-# Sigma defines how much we stretch the Peak weights at each gate
+# Set peak weights for the Gaussian-like cost function around each gate]
+# Set individual sigma values for each gate (controls the width of the Gaussian peak); 0.01 5% is of the norm scale
 GATE_WEIGHT_CONFIG = {
-    0: {"peak_weight": 75, "sigma": 0.04},  # Gate 0: narrow peak
-    1: {"peak_weight": 75, "sigma": 0.02},  # Gate 1: wider peak
-    2: {"peak_weight": 75, "sigma": 0.08},  # Gate 2: narrow peak
-    3: {"peak_weight": 120, "sigma": 0.04}  # Gate 3: very narrow, high peak
+    0: {"peak_weight": 500, "sigma": 0.02},   # Gate 0: narrow peak
+    1: {"peak_weight": 300, "sigma": 0.02}, # Gate 1: wider peak  
+    2: {"peak_weight": 300, "sigma": 0.02},  # Gate 2: narrow peak
+    3: {"peak_weight": 300, "sigma": 0.02}  # Gate 3: very narrow, high peak
 }
 
-# self.gate_peak_weights = [75, 75, 75, 120]
 
 class MPController(Controller):
     """Model Predictive Controller using collective thrust and attitude interface."""
@@ -34,31 +36,31 @@ class MPController(Controller):
             config: Configuration of the environment.
         """
         super().__init__(obs, info, config)
+
+        
         ### ====================================================================== ###
         ### =========================== Waypoints ================================ ###
         ### ====================================================================== ###
 
-        # Gate-Posittions better for simulation
+        # Gate-Positionen
         gates = np.array([
             [0.45, -0.50, 0.56],  # Gate 0      [0.45, -0.5, 0.56]
-            [1.0, -1.05, 1.2],    # Gate 1      [1.0, -1.05, 1.11]
-            [-0.04, 1.0, 0.59],   # Gate 2      [0.0, 1.0, 0.56]       #     [0.04, 1.0, 0.66],  (real deployment) 
+            [1.0, -1.05, 1.25],   # Gate 1      [1.0, -1.05, 1.11]
+            [0.0, 1.0, 0.56],     # Gate 2      [0.0, 1.0, 0.56]
             [-0.5, 0.0, 1.11]     # Gate 3      [-0.5, 0.0, 1.11]
         ])
         
-        
-        # Start to Gate 0
+        # Start bis Gate 0
         b0 = np.array([
-            [1.0, 1.5, 0.2], #[1.0, 1.5, 0.15]
-            [0.8, 1.0, 0.2], #[0.85, 1.0, 0.2]
+            [1.0, 1.5, 0.2],
+            [0.8, 1.0, 0.2],
             [0.7, 0.1, 0.4]
         ])
-
         
         # Gate 0 -- Gate 1
         b1 = np.array([
-            [0.25, -0.7, 0.65],  # [0.2, -0.7, 0.65],
-            # [0.1, -1.0, 0.75],
+            [0.2, -0.7, 0.65],  
+            [0.1, -1.0, 0.75],
             [0.5, -1.5, 0.8]
         ])
         
@@ -70,43 +72,21 @@ class MPController(Controller):
         
         # Gate 2 -- Gate 3
         b3 = np.array([
-            [-0.2, 1.4, 0.66],
-            [-0.97, 1.3, 0.8],      #[-0.9, 1.3, 0.8],
-            #[-0.75, 0.5, 1.11]   
-            # -                     #[-0.85, 0.5, 0.9]  
+            [-0.2, 1.5, 0.56],
+            [-0.9, 1.3, 0.8],
+            [-0.75, 0.5, 1.11]   
         ])
-
-
         
-        # after Gate 3 
+        # nach Gate 3 
         b4 = np.array([
-            [-0.1, -1, 1.2]
+            [-0.1, -1, 1.11]
         ])
         
         # Kombiniere alle Waypoints: b0 + gate0 + b1 + gate1 + b2 + gate2 + b3 + gate3 + b4
         waypoint_sections = [b0, gates[0:1], b1, gates[1:2], b2, gates[2:3], b3, gates[3:4], b4]
         waypoints = np.vstack(waypoint_sections)
         
-        # Automatische Indizes berechnen
-        current_index = 0
-        gate_indices = []
-        waypoint_blocks = {}
-        
-        for i, section in enumerate(waypoint_sections):
-            section_length = len(section)
-            
-            if i % 2 == 1:  # Ungerade Indizes sind Gates (1, 3, 5, 7)
-                gate_idx = i // 2  # 0, 1, 2, 3
-                gate_indices.append(current_index)
-            else:  # Gerade Indizes sind Waypoint-Blöcke (0, 2, 4, 6, 8)
-                block_idx = i // 2  # 0, 1, 2, 3, 4
-                waypoint_blocks[block_idx] = list(range(current_index, current_index + section_length))
-            
-            current_index += section_length
-        
-        # Store strukturierte Daten
-        self.waypoint_blocks = waypoint_blocks
-        self.gate_indices = gate_indices
+
         self.waypoints = waypoints
 
         
@@ -119,6 +99,27 @@ class MPController(Controller):
         ### ====================================================================== ###
         ### =========================== Mapping ================================== ###
         ### ====================================================================== ###
+
+
+        # Automatische Indizes berechnen
+        current_index = 0
+        gate_indices = []
+        waypoint_blocks = {}
+        
+        for i, section in enumerate(waypoint_sections):
+            section_length = len(section)
+            
+            if i % 2 == 1:  # Ungerade Indizes sind Gates (1, 3, 5, 7)
+                gate_indices.append(current_index)
+            else:  # Gerade Indizes sind Waypoint-Blöcke (0, 2, 4, 6, 8)
+                block_idx = i // 2  # 0, 1, 2, 3, 4
+                waypoint_blocks[block_idx] = list(range(current_index, current_index + section_length))
+            
+            current_index += section_length
+        
+        # Store strukturierte Daten
+        self.waypoint_blocks = waypoint_blocks
+        self.gate_indices = gate_indices
 
         
         # Automatisches Gate-zu-Waypoint-Mapping
@@ -141,7 +142,6 @@ class MPController(Controller):
 
             "g3": [  # Wenn sich Gate 3 ändert
             ("g3", 1.0, 1.0, 1.0, [0.0, 0.0, 0.0]),    # Gate 3 selbst mit Offset
-            ("b4.0", 1.0, 1.0, 1.0, [0.0, 0.0, 0.0]),  # Block 3, Waypoint 0 (at obstacle 1)
             ],
 
             "o1": [  # Wenn sich Obstacle 1 ändert  
@@ -150,14 +150,11 @@ class MPController(Controller):
             ("b1.2", 1.0, 1.0, 0.0, [0.0, 0.0, 0.0]),  # Block 1, Waypoint 2
             ],
 
-            #add reaction to obstacle 2 from top of tree ?
-
             "o3": [  # Wenn sich Obstacle 3 ändert
             ("b3.2", 2.0, 2.0, 0.0, [0.0, 0.0, 0.0]),  # Block 3, Waypoint 2 (at obstacle 4)
             ],
         }
         
-        self._last_obstacles_pos = None  # Store previous obstacle positions
 
         # for visualization 
         vis_s = np.linspace(0.0, 1.0, 700)
@@ -175,7 +172,7 @@ class MPController(Controller):
 
         # Toggle logging by setting this flag to True or False
         self.logging_enabled = True
-        if self.logging_enabled:
+        if  self.logging_enabled:
             # Initialize logger
             self.logger = DataLogger(log_dir="logs")
             self._last_log_time = -1
@@ -183,8 +180,8 @@ class MPController(Controller):
             self.logger = None
 
         # MPC parameters
-        self.N = 50                   #50
-        self.T_HORIZON = 1.5           #1.5
+        self.N = 20                   # Number of discretization steps
+        self.T_HORIZON = 0.6           # Time horizon in seconds
         self.dt = self.T_HORIZON / self.N  # Step size
 
         # Initialize state variables    
@@ -196,31 +193,47 @@ class MPController(Controller):
         self.config = config
         self.finished = False
         self._info = info
-        self._path_log = []
 
         self._last_gates_visited = None  # Initialize gate tracking
         self._last_gates_pos = None      # Store previous gate positions for delta calculation
+        self._last_obstacles_pos = None  # Store previous obstacle positions
 
 
-        self.theta = 0.0  # Current theta value (progress along trajectory)
-        t= 3.6
-        self.v_theta = 1/ (t * self.dt * self.freq) ## from niclas with 6 or 7
+        self.theta = 0
+        t= 4.7
+        self.v_theta = 1/ (t * self.dt * self.freq) 
 
+        dx   = self.cs_x.derivative(1)
+        ddx  = self.cs_x.derivative(2)
+        dy   = self.cs_y.derivative(1)
+        ddy  = self.cs_y.derivative(2)
+        dz   = self.cs_z.derivative(1)
+        ddz  = self.cs_z.derivative(2)
 
+        def curvature(theta):
+            v = np.array([dx(theta), dy(theta), dz(theta)])
+            a = np.array([ddx(theta), ddy(theta), ddz(theta)])
+            num = np.linalg.norm(np.cross(v, a))
+            den = np.linalg.norm(v)**3 + 1e-8
+            return num/den
+        
+        self.curvature = curvature    
+        self.base_v_theta = self.v_theta
 
+        # Automatische Gate-Thetas basierend auf berechneten Indizes
         self.gate_thetas = [ts[i] for i in gate_indices]
 
-
+         # Extract peax wewights and peak sigmas from the configuration
         self.gate_peak_weights = [GATE_WEIGHT_CONFIG[i]["peak_weight"] for i in range(4)]
         self.gate_sigmas = [GATE_WEIGHT_CONFIG[i]["sigma"] for i in range(4)]
 
-
+        self.base_weight = 130.0
 
         # Create the optimal control problem solver
         self.acados_ocp_solver, self.ocp = create_ocp_solver(self.T_HORIZON, self.N)
 
-        self.base_weight = 70   
-        
+
+
 
 
     def compute_control(
@@ -235,31 +248,21 @@ class MPController(Controller):
         Returns:
             The collective thrust and orientation [t_des, r_des, p_des, y_des] as a numpy array.
         """
-
         if self.theta >= 1.2:
             self.finished = True
             
-
-
-
         # Construct the current state vector for the MPC solver
-        xcurrent = np.concatenate((obs["pos"], obs["vel"],  R.from_quat(obs["quat"]).as_euler("xyz", degrees=False), [self.last_f_collective, self.last_f_cmd], self.last_rpy_cmd, [ self.theta, self.v_theta]) )
-        self.acados_ocp_solver.set(0, "lbx", xcurrent)
-        self.acados_ocp_solver.set(0, "ubx", xcurrent)
-
-
-        min_dist,_,min_theta = self.compute_min_distance_to_trajectory(obs["pos"])
-
-        self.pos = obs["pos"]
-        # update trajectory
-        self._handle_unified_update(obs)
-
+        xcurrent = np.concatenate((obs["pos"], obs["vel"],  R.from_quat(obs["quat"]).as_euler("xyz", degrees=False), [self.last_f_collective, self.last_f_cmd], self.last_rpy_cmd) )
+        
+        # Log state vector every 0.1 seconds
         if self.logger:
             current_time = self._tick / self.freq
             if current_time - self._last_log_time >= 0.01:
-                
-                
-                # Reference point on trajectory
+
+                # Calculate current curvature and distance
+                kappa = self.curvature(self.theta)
+
+                # Referenzpunkt auf der Trajektorie
                 ref_pt = np.array([
                     self.cs_x(self.theta),
                     self.cs_y(self.theta),
@@ -267,44 +270,52 @@ class MPController(Controller):
                 ])
                 
                 try:
-                    # Try to get control vector if solver has run
                     u1 = self.acados_ocp_solver.get(1, "u")
                     self.logger.log_state(
                         current_time, xcurrent, u1, 
                         ref_point=ref_pt, 
-                        curvature=-1,
-                        min_dist=min_dist
+                        curvature=kappa
                     )
                 except:
-                    # First iteration, no control yet
                     self.logger.log_state(
-                        current_time, 
-                        xcurrent, 
+                        current_time, xcurrent, 
                         ref_point=ref_pt, 
-                        curvature=-1,
-                        min_dist=min_dist
+                        curvature=kappa
                     )
-                
+            
                 
                 self._last_log_time = current_time
+                
+        
+                
+        self.acados_ocp_solver.set(0, "lbx", xcurrent)
+        self.acados_ocp_solver.set(0, "ubx", xcurrent)
+
+        ### ======================================= ###
+        ### ============ Set parameters =========== ###
+        ### ======================================= ###
+
+        # update trajectory
+        self._handle_unified_update(obs)
+
+        κ = self.curvature(self.theta)
+        alpha = 0.12
+        self.v_theta = self.base_v_theta / (1 + alpha * κ)
 
 
 
-        # Prepare reference trajectory and weights for all steps in the horizon
+
         for j in range(self.N + 1):
             theta_j = min(self.theta + j * self.v_theta * self.dt, 1.0)
             theta_j_next = min(theta_j + 0.0001, 1.0)
-            theta_min_j = min(min_theta + j * self.v_theta * self.dt, 1.0)
-
 
             p_ref = np.array([
-            self.cs_x(theta_j), self.cs_y(theta_j), self.cs_z(theta_j), # for contouring
-            self.cs_x(theta_j_next), self.cs_y(theta_j_next), self.cs_z(theta_j_next), #for contouring
-            self.weight_for_theta(theta_min_j),   # for gauss weighting
-            self.cs_x(theta_min_j), self.cs_y(theta_min_j), self.cs_z(theta_min_j) # for real minimun distance
+                self.cs_x(theta_j), self.cs_y(theta_j), self.cs_z(theta_j),  # for contouring
+                self.cs_x(theta_j_next), self.cs_y(theta_j_next), self.cs_z(theta_j_next),  # for contouring
+                self.weight_for_theta(theta_j),  # for gauss weighting
             ])
-            self.acados_ocp_solver.set(j, "p", p_ref)
 
+            self.acados_ocp_solver.set(j, "p", p_ref)
 
 
         ### ======================================= ###
@@ -312,22 +323,22 @@ class MPController(Controller):
         ### ======================================= ###
         self.acados_ocp_solver.solve()
         x1 = self.acados_ocp_solver.get(1, "x")
-        u1 = self.acados_ocp_solver.get(1, "u")
 
 
-
+        ### ======================================= ###
+        ### ============ Update state ============= ###
+        ### ======================================= ###
 
         w = 1 / self.config.env.freq / self.dt
         self.last_f_collective = self.last_f_collective * (1 - w) + x1[9] * w
         self.last_f_cmd = x1[10]
         self.last_rpy_cmd = x1[11:14]  
 
-        self.v_theta = x1[15] 
         self.theta = min(1.0, self.theta + self.v_theta * self.dt)
-  
-  
-        cmd = x1[10:14]
-        
+        cmd = x1[10:14].copy()
+        # cmd[0] *= 0.75 #für 0.25
+        cmd[0] *= 1 
+
         return cmd
 
 
@@ -350,18 +361,12 @@ class MPController(Controller):
         """
         self._tick += 1
         self._info = obs
-        # Store drone position for trajectory logging
-        self._path_log.append(obs["pos"].copy())
         return self.finished
-    
-
-
 
     def episode_reset(self):
         """Reset controller state for a new episode."""
-        self._plotted_once = False
-        self._path_log = []
         self._tick = 0  # Important for timing and next episode
+
 
     def episode_callback(self, curr_time: float=None):
         """Callback at the end of each episode.
@@ -369,30 +374,33 @@ class MPController(Controller):
         Args:
             curr_time: Current simulation time.
         """
-        pass
+        if self.logger:
+            self.logger.log_final_positions(
+                gates_pos=self._info.get("gates_pos"),
+                obstacles_pos=self._info.get("obstacles_pos")
+            )
+            self.logger.close()
+        # # -------------- Plot erzeugen ---------------------------------
+        # try:
+        #     plot_script = pathlib.Path("plots/plot_speed.py").resolve()   # Pfad anpassen, wenn nötig
+        #     subprocess.run(
+        #         [sys.executable, str(plot_script), str(self.logger.run_dir)],
+        #         check=True
+        #     )
+        # except Exception as e:
+        #     print(f"[WARN] Speed-Plot konnte nicht erzeugt werden: {e}")
 
- 
+    def get_trajectory(self) -> NDArray[np.floating]:
+        return self._trajectory_history
+    
+    def get_waypoints(self) -> NDArray[np.floating]:
+        return {
+            'waypoints': self.waypoints,
+            'gate_indices': self.gate_indices,
+            'waypoint_blocks': self.waypoint_blocks,
+            'gate_to_waypoint_mapping': self.gate_to_waypoint_mapping
+        }
 
-
-
-    # def get_trajectory(self) -> NDArray[np.floating]:
-    #     """Get the smoothed reference trajectory points.
-        
-    #     Returns:
-    #         Array of shape (700, 3) containing interpolated trajectory points.
-    #     """
-    #     # Recreate spline interpolation of waypoints
-    #     ts = np.linspace(0, 1, np.shape(self.waypoints)[0])
-    #     cs_x = CubicSpline(ts, self.waypoints[:, 0])
-    #     cs_y = CubicSpline(ts, self.waypoints[:, 1])
-    #     cs_z = CubicSpline(ts, self.waypoints[:, 2])
-        
-    #     # Generate high-density points for visualization
-    #     vis_s = np.linspace(0.0, 1.0, 700)
-    #     traj_points = np.column_stack((cs_x(vis_s), cs_y(vis_s), cs_z(vis_s)))
-
-    #     return traj_points
-        
     def get_prediction_horizon(self) -> NDArray[np.floating]:
         """Get the predicted position trajectory for the planning horizon.
         
@@ -403,55 +411,13 @@ class MPController(Controller):
         # Collect predicted states for all steps in the horizon
         horizon_positions = []
         for i in range(self.N):
-            try:
-                state = self.acados_ocp_solver.get(i, "x")
-                # First three elements of the state are x,y,z positions
-                pos = state[:3]
-                horizon_positions.append(pos)
-            except Exception as e:
-                print(f"Warning: Could not get state for horizon step {i}: {e}")
-                break
-        
-        if len(horizon_positions) == 0:
-            return np.array([]).reshape(0, 3)
+            state = self.acados_ocp_solver.get(i, "x")
+            # First three elements of the state are x,y,z positions
+            pos = state[:3]
+            horizon_positions.append(pos)
         
         return np.array(horizon_positions)
-    
 
-
-
-
-
-    def get_trajectory(self) -> NDArray[np.floating]:
-        return self._trajectory_history
-    
-    def get_waypoints(self) -> NDArray[np.floating]:  
-        return {
-            'waypoints': self.waypoints,
-            'gate_indices': self.gate_indices,
-            'waypoint_blocks': self.waypoint_blocks,
-            'gate_to_waypoint_mapping': self.gate_to_waypoint_mapping
-        }
-
-    # def get_prediction_horizon(self) -> NDArray[np.floating]:
-    #     """Get the predicted position trajectory for the planning horizon.
-        
-    #     Returns:
-    #         Array of shape (N, 3) containing the predicted x,y,z positions
-    #         for the next N timesteps in the planning horizon.
-    #     """
-    #     # Collect predicted states for all steps in the horizon
-    #     horizon_positions = []
-    #     for i in range(self.N):
-    #         state = self.acados_ocp_solver.get(i, "x")
-    #         # First three elements of the state are x,y,z positions
-    #         pos = state[:3]
-    #         horizon_positions.append(pos)
-        
-    #     return np.array(horizon_positions)
-
-
-    
     def get_contour_lag_error(self, drone_pos):
         """Calculate visualization data for plotting error vectors and reference points.
         
@@ -461,12 +427,6 @@ class MPController(Controller):
         Returns:
             dict: Dictionary containing all visualization data with keys:
                 - ref_point: Reference point on trajectory
-                - next_point: Next point for tangent calculation  
-                - t_hat: Unit tangent vector
-                - e_vec: Error vector (drone_pos - ref_point)
-                - e_l_scalar: Lag error scalar
-                - e_l_vec: Lag error vector
-                - e_c_vec: Contour error vector
                 - t_hat_scaled: Scaled tangent vector for visualization
                 - e_l_vis: Lag error visualization point
                 - e_c_vis: Contour error visualization point
@@ -505,144 +465,11 @@ class MPController(Controller):
         
         return {
             'ref_point': ref_point,
-            'next_point': next_point,
-            't_hat': t_hat,
-            'e_vec': e_vec,
-            'e_l_scalar': e_l_scalar,
-            'e_l_vec': e_l_vec,
-            'e_c_vec': e_c_vec,
             't_hat_scaled': t_hat_scaled,
             'e_l_vis': e_l_vis,
             'e_c_vis': e_c_vis
         }
 
-
-
-
-
-
-
-    def compute_min_distance_to_trajectory(self, drone_pos):
-        """
-        Berechnet den minimalen Abstand der Drohne zur Trajektorie,
-        indem nur der Bereich hinter dem aktuellen Theta durchsucht wird.
-        
-        Args:
-            drone_pos: Position der Drohne als np.array([x, y, z])
-            
-        Returns:
-            tuple: (minimaler Abstand, Position des nächsten Punkts)
-        """
-        # Aktueller Referenzpunkt als obere Grenze der Suche
-        current_theta = self.theta
-        
-        # Parameter für die Suche
-        search_range = 0.1  # Wie weit zurück suchen (in theta-Einheiten)
-        coarse_samples = 10  # Anzahl grober Samples für erste Suche
-        fine_samples = 10     # Anzahl feiner Samples für die Verfeinerung
-        
-        # Definiere den Suchbereich (nur nach hinten)
-        search_start = max(0.0, current_theta - search_range)
-        search_end = current_theta  # Endet beim aktuellen Punkt
-        
-        # 1. Grobe Suche
-        min_dist = float('inf')
-        min_theta = current_theta
-        
-        # Überspringe die Suche, wenn wir am Anfang der Trajektorie sind
-        if search_start >= search_end:
-            # Berechne Abstand zum Anfangspunkt
-            pos_x = self.cs_x(0)
-            pos_y = self.cs_y(0)
-            pos_z = self.cs_z(0)
-            traj_pos = np.array([pos_x, pos_y, pos_z])
-            return np.linalg.norm(drone_pos - traj_pos), traj_pos, 0
-        
-        # Grobe Abtastung des Suchbereichs
-        theta_values = np.linspace(search_start, search_end, coarse_samples)
-        for theta in theta_values:
-            # Berechne Position auf der Trajektorie
-            pos_x = self.cs_x(theta)
-            pos_y = self.cs_y(theta)
-            pos_z = self.cs_z(theta)
-            traj_pos = np.array([pos_x, pos_y, pos_z])
-            
-            # Berechne Abstand
-            dist = np.linalg.norm(drone_pos - traj_pos)
-            
-            # Aktualisiere Minimum
-            if dist < min_dist:
-                min_dist = dist
-                min_theta = theta
-                min_traj_pos = traj_pos
-        
-        # 2. Feine Suche
-        fine_search_start = max(0.0, min_theta - search_range/coarse_samples)
-        fine_search_end = min(current_theta, min_theta + search_range/coarse_samples)
-        
-        # Feine Abtastung des eingegrenzten Bereichs
-        fine_theta_values = np.linspace(fine_search_start, fine_search_end, fine_samples)
-        for theta in fine_theta_values:
-            pos_x = self.cs_x(theta)
-            pos_y = self.cs_y(theta)
-            pos_z = self.cs_z(theta)
-            traj_pos = np.array([pos_x, pos_y, pos_z])
-            
-            dist = np.linalg.norm(drone_pos - traj_pos)
-            if dist < min_dist:
-                min_dist = dist
-                min_traj_pos = traj_pos
-                min_theta = theta
-        
-        return min_dist, min_traj_pos, min_theta
-    
-
-    # def get_weight(self, theta: float) -> float:
-    #     """
-    #     Gibt das Gewicht w(theta) zurück, das mindestens base_weight ist
-    #     und an jedem Gate auf bis zu gate_peak_weights[i] ansteigt.
-    #     """
-    #     base_weight = 20
-    #     sigma       = 0.05
-
-    #     w = base_weight
-    #     # Durchlaufe Gates und zugehörige Spitzengewichte
-    #     for gθ, peak_w in zip(self.gate_thetas, self.gate_peak_weights):
-    #         diff      = theta - gθ
-    #         influence = (peak_w - base_weight) * np.exp(-0.5 * (diff/sigma)**2)
-    #         w         = max(w, base_weight + influence)
-
-    #     return w
-    
-
-    def weight_for_theta(self, theta: float) -> float:
-        """
-        Calculates the contouring cost weight based on the progress `theta`.
-
-        The weight is increased when the drone is near a gate, creating a
-        Gaussian-like peak in the cost function. This encourages tighter
-        tracking in critical regions of the trajectory.
-
-        Args:
-            theta: The current progress along the trajectory (0 to 1).
-
-        Returns:
-            The calculated weight for the contouring cost.
-        """
-        # Start with the base weight (default cost away from gates)
-        w = self.base_weight
-        # Loop over all gates with their individual sigmas and peak weights
-        for gate_theta, peak_weight, sigma in zip(self.gate_thetas, self.gate_peak_weights, self.gate_sigmas):
-            # Compute the normalized distance from the current theta to the gate's theta
-            diff = (theta - gate_theta) / sigma  # self.sigma controls the width of the peak
-            # Compute the Gaussian-shaped influence of this gate
-            gate_influence = abs(peak_weight - self.base_weight) * np.exp(-0.5 * diff * diff)
-            print(f"Peak weight={peak_weight}, Base weight={self.base_weight}, Gate influence={gate_influence}")
-            # The weight at this theta is the maximum of the base weight and all gate influences
-            w = max(w, self.base_weight + gate_influence)
-        # Return the final weight for this theta
-        return w
-    
     def _handle_unified_update(self, obs: dict[str, NDArray[np.floating]]):
         """Handles both gate and obstacle changes with unified response mapping."""
         
@@ -684,7 +511,7 @@ class MPController(Controller):
         
         delta = new_pos - old_pos
     
-        trajectory_updated = False 
+        
         for target, x_factor, y_factor, z_factor, offset in self.response_mapping[trigger_id]:
             
             # Calculate response with factors and offset
@@ -727,5 +554,30 @@ class MPController(Controller):
             vis_s = np.linspace(0.0, 1.0, 700)
             new_traj = np.column_stack((self.cs_x(vis_s), self.cs_y(vis_s), self.cs_z(vis_s)))
             self._trajectory_history.append(new_traj.copy())
+    
+    def weight_for_theta(self, theta: float) -> float:
+        """
+        Calculates the contouring cost weight based on the progress `theta`.
 
+        The weight is increased when the drone is near a gate, creating a
+        Gaussian-like peak in the cost function. This encourages tighter
+        tracking in critical regions of the trajectory.
 
+        Args:
+            theta: The current progress along the trajectory (0 to 1).
+
+        Returns:
+            The calculated weight for the contouring cost.
+        """
+        # Start with the base weight (default cost away from gates)
+        w = self.base_weight
+        # Loop over all gates with their individual sigmas and peak weights
+        for gate_theta, peak_weight, sigma in zip(self.gate_thetas, self.gate_peak_weights, self.gate_sigmas):
+            # Compute the normalized distance from the current theta to the gate's theta
+            diff = (theta - gate_theta) / sigma  # self.sigma controls the width of the peak
+            # Compute the Gaussian-shaped influence of this gate
+            gate_influence = (peak_weight - self.base_weight) * np.exp(-0.5 * diff * diff)
+            # The weight at this theta is the maximum of the base weight and all gate influences
+            w = max(w, self.base_weight + gate_influence)
+        # Return the final weight for this theta
+        return w

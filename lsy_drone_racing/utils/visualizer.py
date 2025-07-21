@@ -56,7 +56,7 @@ class SimVisualizer:
         drone_pos = obs["pos"]
         self.flown_positions.append(drone_pos)
         trajectories = controller.get_trajectory()
-        vis_data = controller.get_visualization_data(drone_pos)
+        vis_data = controller.get_contour_lag_error(drone_pos)
 
 
         # Extract data for easier access

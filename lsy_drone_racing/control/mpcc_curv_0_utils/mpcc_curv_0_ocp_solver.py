@@ -4,7 +4,7 @@ import numpy as np
 from acados_template import AcadosOcp, AcadosOcpSolver
 from casadi import DM
 
-from lsy_drone_racing.control.export_quadrotor_ode_model import export_quadrotor_ode_model
+from lsy_drone_racing.control.mpcc_curv_0_utils.mpcc_curv_0_quadrotor_ode_model import export_quadrotor_ode_model
 from lsy_drone_racing.control.helper.costfunction import contour_and_lag_error, get_min_distance_to_trajectory
 from casadi import DM, sum1, exp
 
