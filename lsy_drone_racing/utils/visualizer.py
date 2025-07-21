@@ -30,6 +30,7 @@ class SimVisualizer:
         self.last_obstacles_positions = {}
         self.obstacle_update_points = []
 
+
  
 
     def update_visualization(self, env, obs, controller):
@@ -42,6 +43,15 @@ class SimVisualizer:
         """
         from lsy_drone_racing.utils import  draw_gates, draw_point, draw_obstacles, draw_line, visualize_cost_weights
         
+        def _filter_duplicate_points(points, eps=1e-9):
+            if len(points) < 2:
+                return points
+            keep = [0]
+            for i in range(1, len(points)):
+                if np.linalg.norm(points[i] - points[keep[-1]]) > eps:
+                    keep.append(i)
+            return points[keep]
+
         # Record current drone position (ground truth state)
         drone_pos = obs["pos"]
         self.flown_positions.append(drone_pos)
@@ -70,10 +80,12 @@ class SimVisualizer:
             fp = np.vstack(self.flown_positions)
             draw_line(env, fp, rgba=np.array([1.0, 0.0, 0.0, 1.0]), min_size=1.5, max_size=1.5)
 
+
         # Draw planning horizon
         prediction_horizon_points = None
         full_horizon = controller.get_prediction_horizon()
         prediction_horizon_points = full_horizon[::3]  # Take only every third point
+        prediction_horizon_points = _filter_duplicate_points(prediction_horizon_points)
         if prediction_horizon_points is not None and len(prediction_horizon_points) >= 2:
             draw_line(env, prediction_horizon_points, rgba=np.array([0.0, 0.8, 1.0, 1.0]), min_size=2.5, max_size=2.5)
 
@@ -142,5 +154,7 @@ class SimVisualizer:
             for direction, wp_idx in indices.items():
                 if wp_idx < len(waypoints):
                     draw_point(env, waypoints[wp_idx], size=0.025, rgba=np.array([1.0, 0.0, 0.0, 0.9]))  # Bright red
+
+
 
 

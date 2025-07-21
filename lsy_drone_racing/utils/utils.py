@@ -540,19 +540,7 @@ def visualize_cost_weights(env, controller):
                  min_size=bar_thickness, 
                  max_size=bar_thickness)    
 
-        # Draw a sphere at the end of the first bar to indicate max weight sphere scales with max weight relative to a weight of 150
-        if j == 0:
-            max_weight_int = int(round(max_weight))
-            text_pos = p2 + 0.08 * ortho
-
-            # Proportional sphere size: max_weight=300 -> size=0.04
-            sphere_size =  0.03 * (max_weight_int / 150)
-            marker_color = np.array([1.0, 0.5, 0.0, 0.3])  # Orange for visibility
-
-            draw_point(env, text_pos, size=sphere_size, rgba=marker_color)
 
         
         bars_drawn += 1
 
-    ### For Debugging
-    # print(f"Total MPC horizon bars drawn: {bars_drawn}")

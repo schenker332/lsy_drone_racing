@@ -459,8 +459,8 @@ class MPController(Controller):
             current_time = self._tick / self.freq
             if current_time - self._last_log_time >= 0.01:
                 
-                ### LEftover abandoned test calculate and update the curvature for a future theta
-                # caluclate kappa over a larger horizon does not seem to make a big difference. trid for N 5-20
+                ### Leftover abandoned test calculate and update the curvature for a future theta
+                # calculate kappa over a larger horizon does not seem to make a big difference. tried for N 5-20
                 # prediction_step = 10
                 # theta_N10 = min(self.theta + prediction_step * self.v_theta * self.dt, 1.0)
                 # kappaN0 = self.curvature(self.theta)
