@@ -73,7 +73,8 @@ def simulate(
         track=config.env.track,
         disturbances=config.env.get("disturbances"),
         randomizations=config.env.get("randomizations"),
-        seed=int(time.time()) % 100000,
+        # seed=int(time.time()) % 100000,
+        seed=config.env.seed,
     )
     env = JaxToNumpy(env)
 
