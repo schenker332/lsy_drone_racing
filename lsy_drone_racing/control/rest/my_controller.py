@@ -144,7 +144,6 @@ class TrajectoryController(Controller):
 
 
     def episode_reset(self):
-        self._plotted_once = False
         self._path_log = []
         self._tick = 0  # Wichtig für Zeitmessung und nächste Episode
 

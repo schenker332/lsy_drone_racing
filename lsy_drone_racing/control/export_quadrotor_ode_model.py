@@ -35,15 +35,14 @@ def export_quadrotor_ode_model():
     r_cmd = SX.sym("r_cmd") #11
     p_cmd = SX.sym("p_cmd") #12
     y_cmd = SX.sym("y_cmd") #13
-    theta = SX.sym("theta") #14
-    v_theta = SX.sym("v_theta") #15
+
 
     # input
     df_cmd = SX.sym("df_cmd")
     dr_cmd = SX.sym("dr_cmd")
     dp_cmd = SX.sym("dp_cmd")
     dy_cmd = SX.sym("dy_cmd")
-    dv_theta_cmd = SX.sym("dv_theta_cmd") 
+
 
     # parameter
     x_ref = SX.sym("x_ref") #0
@@ -52,32 +51,8 @@ def export_quadrotor_ode_model():
     x_ref_next = SX.sym("x_ref_next") #3
     y_ref_next = SX.sym("y_ref_next") #4
     z_ref_next = SX.sym("z_ref_next") #5
-    # weight = SX.sym("weight")  # Weight for minimum distance to trajectory #6
-    # x_ref_min = SX.sym("x_ref_min") #7
-    # y_ref_min = SX.sym("y_ref_min") #8
-    # z_ref_min = SX.sym("z_ref_min") #9
-    # min_distance = SX.sym("min_distance") #7
-    cost = SX.sym("cost")  # Cost for minimum distance to trajectory #6
-    # x_obstacles_pos1 = SX.sym("x_obstacles_pos1") #10
-    # y_obstacles_pos1 = SX.sym("y_obstacles_pos1") #11
-    # z_obstacles_pos1 = SX.sym("z_obstacles_pos1") #12
-    # x_obstacles_pos2 = SX.sym("x_obstacles_pos2") #13
-    # y_obstacles_pos2 = SX.sym("y_obstacles_pos2") #14
-    # z_obstacles_pos2 = SX.sym("z_obstacles_pos2") #15
-    # x_obstacles_pos3 = SX.sym("x_obstacles_pos3") #16
-    # y_obstacles_pos3 = SX.sym("y_obstacles_pos3") #17
-    # z_obstacles_pos3 = SX.sym("z_obstacles_pos3") #18
-    # x_obstacles_pos4 = SX.sym("x_obstacles_pos4") #19
-    # y_obstacles_pos4 = SX.sym("y_obstacles_pos4") #20
-    # z_obstacles_pos4 = SX.sym("z_obstacles_pos4") #21
+    q_c_gauss = SX.sym("q_c_gauss")  # Cost for minimum distance to trajectory #6
 
-    # Create a vector for the obstacle positions
-    # obstacles_pos = vertcat(
-    #     x_obstacles_pos1, y_obstacles_pos1, z_obstacles_pos1,
-    #     x_obstacles_pos2, y_obstacles_pos2, z_obstacles_pos2,
-    #     x_obstacles_pos3, y_obstacles_pos3, z_obstacles_pos3,
-    #     x_obstacles_pos4, y_obstacles_pos4, z_obstacles_pos4
-    # )
 
 
     # State and input vectors
@@ -86,20 +61,16 @@ def export_quadrotor_ode_model():
         vx, vy, vz, # 3, 4, 5
         roll, pitch, yaw, # 6, 7, 8
         f_collective, f_collective_cmd, r_cmd, # 9, 10, 11
-        p_cmd, y_cmd, # 12, 13
-        theta, v_theta # 14, 15
+        p_cmd, y_cmd # 12, 13
 
     )
     controls = vertcat(df_cmd, dr_cmd, dp_cmd, # 0, 1, 2
-                       dy_cmd, dv_theta_cmd) # 3, 4
+                       dy_cmd) # 3, 4
     
     p = vertcat(x_ref, y_ref, z_ref, # 0, 1, 2
-                 x_ref_next, y_ref_next, z_ref_next, # 3, 4, 5
-                #    weight,min_distance, # 6, 7
-                    #x_ref_min, y_ref_min,  z_ref_min,
-                    #  obstacles_pos
-                    cost # 6
-                     ) # 9
+                x_ref_next, y_ref_next, z_ref_next, # 3, 4, 5
+                q_c_gauss # 6
+                ) 
 
     # System dynamics
     f_expl = vertcat(
@@ -116,9 +87,7 @@ def export_quadrotor_ode_model():
         df_cmd,
         dr_cmd,
         dp_cmd,
-        dy_cmd,
-        v_theta,  # theta_dot = v_theta
-        dv_theta_cmd,  # v_theta_dot = dv_theta_cmd
+        dy_cmd
     )
 
 

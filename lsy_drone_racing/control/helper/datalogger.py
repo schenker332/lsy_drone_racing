@@ -28,7 +28,7 @@ class DataLogger:
         header = [
             "time", "px", "py", "pz", "vx", "vy", "vz", 
             "roll", "pitch", "yaw", "f_collective", "f_collective_cmd", 
-            "r_cmd", "p_cmd", "y_cmd", "theta", "v_theta",
+            "r_cmd", "p_cmd", "y_cmd",
             "ref_x", "ref_y", "ref_z"       # ← neu
         ]
         self.state_writer.writerow(header)
@@ -38,7 +38,7 @@ class DataLogger:
         self.control_file_handle = open(self.control_log_file, 'w', newline='')
         self.control_writer = csv.writer(self.control_file_handle)
         header = [
-            "time", "df_cmd", "dr_cmd", "dp_cmd", "dy_cmd", "dv_theta_cmd"
+            "time", "df_cmd", "dr_cmd", "dp_cmd", "dy_cmd"
         ]
         self.control_writer.writerow(header)
 
