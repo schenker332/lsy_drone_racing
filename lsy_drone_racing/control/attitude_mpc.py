@@ -620,9 +620,9 @@ class MPController(Controller):
         
         # # print(f"weight: {self.get_weight(min_theta):.2f}")
         # print(f"min_dist: {min_dist:.2f} at theta: {min_theta:.2f}")
-        print(f"Time: {self._tick/self.freq:.2f}s")
-        # print the current drone positions only
-        print(f"Tick {self._tick}: px={x1[0]:.4f}, py={x1[1]:.4f}, pz={x1[2]:.4f}")
+        # print(f"Time: {self._tick/self.freq:.2f}s")
+        # # print the current drone positions only
+        # print(f"Tick {self._tick}: px={x1[0]:.4f}, py={x1[1]:.4f}, pz={x1[2]:.4f}")
 
         # --- Update State for Next Iteration ---
         w = 1 / self.config.env.freq / self.dt
