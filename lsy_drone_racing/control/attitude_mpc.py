@@ -17,10 +17,10 @@ import sys
 # Set peak weights for the Gaussian-like cost function around each gate]
 # Set individual sigma values for each gate (controls the width of the Gaussian peak); 0.01 5% is of the norm scale
 GATE_WEIGHT_CONFIG = {
-    0: {"peak_weight": 200, "sigma": 0.04},   # Gate 0: narrow peak
-    1: {"peak_weight": 200, "sigma": 0.02}, # Gate 1: wider peak  
-    2: {"peak_weight": 200, "sigma": 0.08},  # Gate 2: narrow peak
-    3: {"peak_weight": 300, "sigma": 0.04}  # Gate 3: very narrow, high peak
+    0: {"peak_weight": 500, "sigma": 0.02},   # Gate 0: narrow peak
+    1: {"peak_weight": 300, "sigma": 0.02}, # Gate 1: wider peak  
+    2: {"peak_weight": 300, "sigma": 0.02},  # Gate 2: narrow peak
+    3: {"peak_weight": 300, "sigma": 0.02}  # Gate 3: very narrow, high peak
 }
 
 
