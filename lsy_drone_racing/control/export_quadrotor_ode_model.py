@@ -41,8 +41,7 @@ def export_quadrotor_ode_model() -> AcadosModel:
     r_cmd = SX.sym("r_cmd")  # Commanded roll rate
     p_cmd = SX.sym("p_cmd")  # Commanded pitch rate
     y_cmd = SX.sym("y_cmd")  # Commanded yaw rate
-    theta = SX.sym("theta")  # Progress along the reference trajectory
-    v_theta = SX.sym("v_theta")  # Rate of progress along the trajectory
+
 
     # --- Define Control Inputs ---
     # These are the variables that the MPC solver can manipulate.
@@ -50,7 +49,7 @@ def export_quadrotor_ode_model() -> AcadosModel:
     dr_cmd = SX.sym("dr_cmd")  # Change in commanded roll rate
     dp_cmd = SX.sym("dp_cmd")  # Change in commanded pitch rate
     dy_cmd = SX.sym("dy_cmd")  # Change in commanded yaw rate
-    dv_theta_cmd = SX.sym("dv_theta_cmd")  # Change in trajectory progress rate
+
 
     # --- Define Online Parameters ---
     # These parameters are updated at each MPC step to provide new references or weights.
@@ -60,7 +59,7 @@ def export_quadrotor_ode_model() -> AcadosModel:
     x_ref_next = SX.sym("x_ref_next")  # Next x-coordinate for tangent calculation
     y_ref_next = SX.sym("y_ref_next")  # Next y-coordinate for tangent calculation
     z_ref_next = SX.sym("z_ref_next")  # Next z-coordinate for tangent calculation
-    cost = SX.sym("cost")  # Weight for the contouring error cost
+    q_c_gauss = SX.sym("q_c_gauss")  # Weight for the contouring error cost
 
     # --- State and Control Vectors ---
     states = vertcat(
@@ -68,21 +67,17 @@ def export_quadrotor_ode_model() -> AcadosModel:
         vx, vy, vz, # 3, 4, 5
         roll, pitch, yaw, # 6, 7, 8
         f_collective, f_collective_cmd, r_cmd, # 9, 10, 11
-        p_cmd, y_cmd, # 12, 13
-        theta, v_theta # 14, 15
+        p_cmd, y_cmd # 12, 13
+
 
     )
     controls = vertcat(df_cmd, dr_cmd, dp_cmd, # 0, 1, 2
-                       dy_cmd, dv_theta_cmd) # 3, 4
+                       dy_cmd) # 3
     
     p = vertcat(x_ref, y_ref, z_ref, # 0, 1, 2
-                 x_ref_next, y_ref_next, z_ref_next, # 3, 4, 5
-                #    weight,min_distance, # 6, 7
-                    #x_ref_min, y_ref_min,  z_ref_min,
-                    #  obstacles_pos
-                    cost # 6
-                     ) # 9
-
+                x_ref_next, y_ref_next, z_ref_next, # 3, 4, 5
+                q_c_gauss # 6
+                ) 
     # System dynamics
     f_expl = vertcat(
         vx,
@@ -98,9 +93,7 @@ def export_quadrotor_ode_model() -> AcadosModel:
         df_cmd,
         dr_cmd,
         dp_cmd,
-        dy_cmd,
-        v_theta,  # theta_dot = v_theta
-        dv_theta_cmd,  # v_theta_dot = dv_theta_cmd
+        dy_cmd
     )
 
     # --- Create the AcadosModel ---

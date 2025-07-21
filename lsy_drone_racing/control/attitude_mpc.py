@@ -409,14 +409,7 @@ class MPController(Controller):
                         # Approximate theta step per unit distance
                         theta_step = after_dist / np.sum(np.linalg.norm(np.diff(waypoints, axis=0), axis=1))
                         theta_center = ts[after_idx] - theta_step
-                    else:
-                        # Fallback: use position-based search
-                        gate_pos = obs["gates_pos"][gate_idx]
-                        theta_center = self._find_theta_for_position(gate_pos)
-                else:
-                    # Fallback: use position-based search
-                    gate_pos = obs["gates_pos"][gate_idx]
-                    theta_center = self._find_theta_for_position(gate_pos)
+
                     
                 self.gate_thetas.append(theta_center)
 
@@ -457,8 +450,7 @@ class MPController(Controller):
                 obs["vel"],
                 R.from_quat(obs["quat"]).as_euler("xyz", degrees=False),
                 [self.last_f_collective, self.last_f_cmd],
-                self.last_rpy_cmd,
-                [self.theta, self.v_theta],
+                self.last_rpy_cmd
             )
         )
 
@@ -481,7 +473,6 @@ class MPController(Controller):
 
                
 
-                min_dist, _, _ = self.compute_min_distance_to_trajectory(obs["pos"], self.theta)
                 
                 # Referenzpunkt auf der Trajektorie
                 ref_pt = np.array([
@@ -503,15 +494,13 @@ class MPController(Controller):
                     self.logger.log_state(
                         current_time, xcurrent, u1, 
                         ref_point=ref_pt, 
-                        curvature=kappa, 
-                        min_dist=min_dist
+                        curvature=kappa
                     )
                 except:
                     self.logger.log_state(
                         current_time, xcurrent, 
                         ref_point=ref_pt, 
-                        curvature=kappa, 
-                        min_dist=min_dist
+                        curvature=kappa
                     )
                 
                 # Log weight data with actual error values
@@ -534,33 +523,18 @@ class MPController(Controller):
         ### ============ Set parameters =========== ###
         ### ======================================= ###
 
-        # _,_,min_theta = self.compute_min_distance_to_trajectory(obs["pos"], self.theta)
-        ## Debugging print for theta
-        # print(f"theta: {self.theta:.2f}")
-        self.pos = obs["pos"]
 
         # update trajectory
         self._handle_unified_update(obs)
 
 
-        ### Try to penalisse distance to obstacles which did not work ###
-        # # to correct: Unused ???
-        # obs_array = obs["obstacles_pos"]          # shape=(4,3)
-        # obs_flat = obs_array.reshape(-1)
 
-        # Adjust progress speed based on trajectory curvature
-        # Slower progress in high-curvature sections for better tracking
         kappa = self.curvature(self.theta)
         alpha = 0.12  # Curvature influence factor
         self.v_theta = self.base_v_theta / (1 + alpha * kappa)
 
-        # currently mainly used for visulization
-        stage_pos    = []
-        nearest_pos  = []
-        self._stage_pos   = np.asarray(stage_pos)
-        self._nearest_pos = np.asarray(nearest_pos)
 
-        # print(self.theta)
+
 
         for j in range(self.N + 1):
             # Compute the theta value for the current step
@@ -589,42 +563,9 @@ class MPController(Controller):
         ### ============ Solve the OCP ============ ###
         ### ======================================= ###
         self.acados_ocp_solver.solve()
-        #This line retrieves the predicted state vector at stage 1 of the MPC horizon and stores it in x1.
         x1 = self.acados_ocp_solver.get(1, "x")
 
-        # print(f"Total cost: {J:.3f}")
 
-        ### ======================================= ###
-        ### ============ Debugging ================ ###
-        ### ======================================= ###
-
-        # print_output(tick=self._tick, obs=obs, freq=self.config.env.freq)
-
-        # u1 = self.acados_ocp_solver.get(1, "u")
-        # # Debugging of  feedback law i.e print u1
-        # # print u1
-        # input_names = ["df_cmd", "dr_cmd", "dp_cmd", "dy_cmd", "dv_theta_cmd"]
-        # for name, value in zip(input_names, u1):
-        #     print(f"{name}: {value:.19f}")
-
-	    ## Debugging prints for state variables
-        # # print_output(tick=self._tick, obs=obs, freq=self.config.env.freq)
-        # state_names = ["px", "py", "pz", "vx", "vy", "vz", "roll", "pitch", "yaw",
-        #                "f_collective", "f_collective_cmd", "r_cmd", "p_cmd", "y_cmd",
-        #                "theta", "v_theta"]
-
-        # for name, value in zip(state_names, x1):
-        #     print(f"{name}: {value}")
-        
-        # print("=" * 20)
-        
-        # # print(f"weight: {self.get_weight(min_theta):.2f}")
-        # print(f"min_dist: {min_dist:.2f} at theta: {min_theta:.2f}")
-        # print(f"Time: {self._tick/self.freq:.2f}s")
-        # # print the current drone positions only
-        # print(f"Tick {self._tick}: px={x1[0]:.4f}, py={x1[1]:.4f}, pz={x1[2]:.4f}")
-
-        # --- Update State for Next Iteration ---
         w = 1 / self.config.env.freq / self.dt
         self.last_f_collective = self.last_f_collective * (1 - w) + x1[9] * w
         self.last_f_cmd = x1[10]
@@ -682,17 +623,6 @@ class MPController(Controller):
                 obstacles_pos=self._info.get("obstacles_pos")
             )
             self.logger.close()
-        # -------------- Plot erzeugen ---------------------------------
-        try:
-            plot_script = pathlib.Path("plots/plot_speed.py").resolve()   # Pfad anpassen, wenn nötig
-            subprocess.run(
-                [sys.executable, str(plot_script), str(self.logger.run_dir)],
-                check=True
-            )
-        except Exception as e:
-            print(f"[WARN] Speed-Plot konnte nicht erzeugt werden: {e}")
-
-
 
 
 
@@ -727,60 +657,6 @@ class MPController(Controller):
         return np.array(horizon_positions)
 
 
-    def compute_min_distance_to_trajectory(self, drone_pos: np.ndarray,
-                                        theta_hint: float | None = None):
-        """
-        Liefert den minimalen Abstand von `drone_pos` zur Spline-Trajektorie
-        in einem kleinen Fenster um `theta_hint`.
-
-        Args
-        ----
-        drone_pos   : np.ndarray, shape (3,)
-        theta_hint  : geschätztes Bahn-θ, um das gesucht wird.
-                    • None  → verwende self.theta  (Ist-Position)
-                    • sonst → Center des Suchintervalls
-
-        Returns
-        -------
-        min_dist     : float              – minimaler Abstand
-        min_traj_pos : np.ndarray, (3,)   – Punkt p* auf der Trajektorie
-        min_theta    : float              – Parameter θ*, zu dem p* gehört
-        """
-        # --- 0) Zentrum des Fensters festlegen ------------------------------
-        if theta_hint is None:
-            theta_hint = self.theta
-
-        # --- 1) Parameter --------------------------------------------
-        half_width     = 0.1      # ±-Fenster (0.05 ≙ 5 % der Spline­länge)
-        coarse_samples = 5
-        fine_samples   = 10
-
-        search_start = max(0.0, theta_hint - half_width)
-        search_end   = min(1.0, theta_hint + half_width)
-
-        # --- 2) Grobe Suche ------------------------------------------
-        min_dist   = np.inf
-        min_theta  = theta_hint
-        min_traj_pos = None
-
-        for θ in np.linspace(search_start, search_end, coarse_samples):
-            p = np.array([self.cs_x(θ), self.cs_y(θ), self.cs_z(θ)])
-            d = np.linalg.norm(drone_pos - p)
-            if d < min_dist:
-                min_dist, min_theta, min_traj_pos = d, θ, p
-
-        # --- 3) Feine Suche um das aktuelle Minimum ------------------
-        δ = half_width / coarse_samples
-        fine_start = max(0.0, min_theta - δ)
-        fine_end   = min(1.0, min_theta + δ)
-
-        for θ in np.linspace(fine_start, fine_end, fine_samples):
-            p = np.array([self.cs_x(θ), self.cs_y(θ), self.cs_z(θ)])
-            d = np.linalg.norm(drone_pos - p)
-            if d < min_dist:
-                min_dist, min_theta, min_traj_pos = d, θ, p
-
-        return min_dist, min_traj_pos, min_theta
 
 
 
@@ -884,20 +760,7 @@ class MPController(Controller):
         self._last_gates_pos = gates_pos.copy() if gates_pos is not None else None
         self._last_obstacles_pos = obstacles_pos.copy() if obstacles_pos is not None else None
 
-    # def _calculate_obstacle2_offset(self, new_pos: np.ndarray, old_pos: np.ndarray, target: str) -> np.ndarray:
-    #     """Calculate offset for obstacle 2 based on position."""
-    #     if new_pos[0] < -0.05:
-    #         # Fixed offset strategy
-    #         return np.array([0.6, 0.4, 0.0])
-    #     else:
-    #         # Proportional strategy for the two waypoints that are affected by obstacle 2 change
-    #         delta = new_pos - old_pos
-    #         if target == "b3_1.0":
-    #             return np.array([delta[0] * 1.0, delta[1] * 1.0, 0.0])
-    #         elif target == "b3_1.1":
-    #             return np.array([delta[0] * 0.8, delta[1] * 0.8, 0.0])
-    #         else:
-    #             return np.array([0.0, 0.0, 0.0])
+
 
     def _apply_unified_response(self, trigger_id: str, new_pos: np.ndarray, old_pos: np.ndarray):
         """Apply unified response mapping for any trigger (gate or obstacle change)."""
@@ -1020,27 +883,3 @@ class MPController(Controller):
         # Return the final weight for this theta
         return w
 
-    def _find_theta_for_position(self, target_pos: np.ndarray) -> float:
-        """
-        Helper function to find the theta parameter for a given target position.
-        Find the theta parameter on the trajectory that is closest to the target position.
-        
-        Args:
-            target_pos: The 3D position to find the closest theta for
-            
-        Returns:
-            The theta parameter (0 to 1) closest to the target position
-        """
-        # Sample the trajectory at many points
-        theta_samples = np.linspace(0, 1, 1000)
-        min_dist = float('inf')
-        best_theta = 0.0
-        
-        for theta in theta_samples:
-            traj_pos = np.array([self.cs_x(theta), self.cs_y(theta), self.cs_z(theta)])
-            dist = np.linalg.norm(target_pos - traj_pos)
-            if dist < min_dist:
-                min_dist = dist
-                best_theta = theta
-        
-        return best_theta

@@ -52,9 +52,6 @@ def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosO
     # --- Cost Function Weights ---
 
     q_c = 90 # contour error weight
-    mu = 0.0004 # progress weight 0.008  ### LEARNING: Progress weight can be really high and sometimes makes the controller more reliable => 0.6 also worked
-    # q_min = p[6]  # gaussian weight
-    # Weight for the contouring error (staying on the path)
     q_l = 60.0  # Weight for the lag error (progress along the path)
 
     # The contouring error weight is set as an online parameter in the model/controller
@@ -62,13 +59,12 @@ def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosO
 
     # --- Control Input Cost ---
     # Weights for the control inputs to penalize excessive commands
-    q_u_vec = DM([0.06, 0.055, 0.055, 0.055, 0.05])  # df_cmd, dr_cmd, dp_cmd, dy_cmd, dv_theta_cmd
+    q_u_vec = DM([0.06, 0.055, 0.055, 0.055])  # df_cmd, dr_cmd, dp_cmd, dy_cmd, dv_theta_cmd
     control_cost = (
         q_u_vec[0] * u[0] ** 2
         + q_u_vec[1] * u[1] ** 2
         + q_u_vec[2] * u[2] ** 2
         + q_u_vec[3] * u[3] ** 2
-        + q_u_vec[4] * u[4] ** 2
     )
 
      # --- Total Cost Expression ---
@@ -76,7 +72,7 @@ def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosO
     # A quadratic cost on v_theta helps stabilize the progress along the trajectory.
     ### LEARNING: Progress v_theta quadratic brings huge stabilisation
     ocp.model.cost_expr_ext_cost    = theta_spec_cont_weight * e_c**2 + q_l * e_l**2  + control_cost      
-    ocp.model.cost_expr_ext_cost_e  = theta_spec_cont_weight * e_c**2 + q_l * e_l**2   
+    ocp.model.cost_expr_ext_cost_e  = 0 
 
 
     ### ========================================= ###
@@ -85,19 +81,11 @@ def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosO
     ocp.constraints.x0 = np.zeros(nx)
     ocp.parameter_values = np.zeros(np_)
 
-    # State constraints (box constraints on specific states)
-    # ### USE if progress penslization is in use AGAIN ###
-    # max_v_theta = 0.16  # Maximum progress velocity
+
     ocp.constraints.lbx = np.array([0.1, 0.1, -1, -0.9, -1.57])
     ocp.constraints.ubx = np.array([0.55, 0.55, 1, 0.9, 1.57])
     ocp.constraints.idxbx = np.array([9, 10, 11, 12, 13])  # Indices of constrained states
 
-    # ### UNCOMENT if progress penslization is in use AGAIN ###
-    # # Input constraints (box constraints on specific inputs)
-    # dv_theta_max = 0.35  # Maximum progress acceleration
-    # ocp.constraints.lbu = np.array([-dv_theta_max])
-    # ocp.constraints.ubu = np.array([dv_theta_max])
-    # ocp.constraints.idxbu = np.array([4])  # Index of dv_theta_cmd in the control input vector
 
     ### ========================================== ###
     ### ============ Solver options ============== ###
