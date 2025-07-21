@@ -14,6 +14,16 @@ import subprocess
 import sys
 
 
+# Set peak weights for the Gaussian-like cost function around each gate]
+# Set individual sigma values for each gate (controls the width of the Gaussian peak); 0.01 5% is of the norm scale
+GATE_WEIGHT_CONFIG = {
+    0: {"peak_weight": 200, "sigma": 0.04},   # Gate 0: narrow peak
+    1: {"peak_weight": 200, "sigma": 0.02}, # Gate 1: wider peak  
+    2: {"peak_weight": 200, "sigma": 0.08},  # Gate 2: narrow peak
+    3: {"peak_weight": 300, "sigma": 0.04}  # Gate 3: very narrow, high peak
+}
+
+
 class MPController(Controller):
     """Model Predictive Controller using collective thrust and attitude interface."""
 
@@ -212,10 +222,12 @@ class MPController(Controller):
 
         # Automatische Gate-Thetas basierend auf berechneten Indizes
         self.gate_thetas = [ts[i] for i in gate_indices]
-        self.gate_peak_weights = [200, 200, 200, 300] # [40, 80, 60, 140]. //// [140, 140, 140, 140] 
+
+         # Extract peax wewights and peak sigmas from the configuration
+        self.gate_peak_weights = [GATE_WEIGHT_CONFIG[i]["peak_weight"] for i in range(4)]
+        self.gate_sigmas = [GATE_WEIGHT_CONFIG[i]["sigma"] for i in range(4)]
 
         self.base_weight = 130.0
-        self.sigma       = 0.01 
 
         # Create the optimal control problem solver
         self.acados_ocp_solver, self.ocp = create_ocp_solver(self.T_HORIZON, self.N)
@@ -286,7 +298,7 @@ class MPController(Controller):
             p_ref = np.array([
                 self.cs_x(theta_j), self.cs_y(theta_j), self.cs_z(theta_j),  # for contouring
                 self.cs_x(theta_j_next), self.cs_y(theta_j_next), self.cs_z(theta_j_next),  # for contouring
-                self.weight_from_theta(theta_j),  # for gauss weighting
+                self.weight_for_theta(theta_j),  # for gauss weighting
             ])
 
             self.acados_ocp_solver.set(j, "p", p_ref)
@@ -528,10 +540,30 @@ class MPController(Controller):
             vis_s = np.linspace(0.0, 1.0, 700)
             new_traj = np.column_stack((self.cs_x(vis_s), self.cs_y(vis_s), self.cs_z(vis_s)))
             self._trajectory_history.append(new_traj.copy())
+    
+    def weight_for_theta(self, theta: float) -> float:
+        """
+        Calculates the contouring cost weight based on the progress `theta`.
 
-    def weight_from_theta(self, theta: float) -> float:
+        The weight is increased when the drone is near a gate, creating a
+        Gaussian-like peak in the cost function. This encourages tighter
+        tracking in critical regions of the trajectory.
+
+        Args:
+            theta: The current progress along the trajectory (0 to 1).
+
+        Returns:
+            The calculated weight for the contouring cost.
+        """
+        # Start with the base weight (default cost away from gates)
         w = self.base_weight
-        for θ_g, peak in zip(self.gate_thetas, self.gate_peak_weights):
-            diff  = (theta - θ_g) / self.sigma
-            w     = max(w, self.base_weight + (peak - self.base_weight)*np.exp(-0.5*diff*diff))
+        # Loop over all gates with their individual sigmas and peak weights
+        for gate_theta, peak_weight, sigma in zip(self.gate_thetas, self.gate_peak_weights, self.gate_sigmas):
+            # Compute the normalized distance from the current theta to the gate's theta
+            diff = (theta - gate_theta) / sigma  # self.sigma controls the width of the peak
+            # Compute the Gaussian-shaped influence of this gate
+            gate_influence = (peak_weight - self.base_weight) * np.exp(-0.5 * diff * diff)
+            # The weight at this theta is the maximum of the base weight and all gate influences
+            w = max(w, self.base_weight + gate_influence)
+        # Return the final weight for this theta
         return w
