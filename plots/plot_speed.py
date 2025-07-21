@@ -1,123 +1,87 @@
+# plot_speed.py
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from pathlib import Path
 
-import os
-import sys
+def plot_speed(run_dir: Path | str) -> None:
+    """
+    Ein einziger Plot mit:
+      • drone speed
+      • Ref‑Speed (L/t)
+      • Ref‑Speed (Δs/Δt)
+      • curvature
+    Speichert speed_plot_combined.png in run_dir.
+    """
+    run_dir   = Path(run_dir)
+    state_csv = run_dir / "state_log.csv"
+    gates_csv = run_dir / "final_gates.csv"
 
-# ------------------------------------------------------------------
-# Konfiguration: Nur hier Pfad zum Run-Ordner anpassen
-# ------------------------------------------------------------------
+    # CSV einlesen und prüfen
+    df = pd.read_csv(state_csv)
+    needed = {'time','vx','vy','vz','v_theta','ref_x','ref_y','ref_z','curvature'}
+    miss = needed - set(df.columns)
+    if miss:
+        raise ValueError(f"Fehlende Spalten: {miss}")
 
-run_dir = sys.argv[1] if len(sys.argv) > 1 else "logs/run_20250712_140004"
+    # Basisgrößen
+    df['speed_drone'] = np.sqrt(df.vx**2 + df.vy**2 + df.vz**2)
+    t = df.time.values
+    v_theta = df.v_theta.values
+    ref_pts = df[['ref_x','ref_y','ref_z']].values
+    curvature = df.curvature.values
 
-# Pfade zu den CSV-Dateien
-state_csv   = f"{run_dir}/state_log.csv"
-gates_csv   = f"{run_dir}/final_gates.csv"
+    # MPC‑Parameter
+    T_H, N, freq = 1.5, 40, 50
+    dt = T_H / N
 
-# ------------------------------------------------------------------
-# 1) State-Log einlesen und prüfen
-# ------------------------------------------------------------------
-df = pd.read_csv(state_csv)
+    # Pfadlänge
+    d_ref = np.diff(ref_pts, axis=0)
+    seg_len = np.linalg.norm(d_ref, axis=1)
+    L = seg_len.sum()
 
-required_cols = {'time', 'vx', 'vy', 'vz', 'v_theta', 'ref_x', 'ref_y', 'ref_z'}
-missing = required_cols - set(df.columns)
-if missing:
-    raise ValueError(f"Fehlende Spalten in CSV: {missing}")
+    # Ref‑Speed A (L/t)
+    t_vals = 1/(v_theta * dt * freq)
+    speed_ref_A = L / t_vals
 
-# ------------------------------------------------------------------
-# 2) Grundgrößen berechnen
-# ------------------------------------------------------------------
-# Speed der Drohne
-df['speed_drone'] = np.sqrt(df.vx**2 + df.vy**2 + df.vz**2)
+    # Ref‑Speed B (Δs/Δt)
+    dt_real = np.diff(t)
+    speed_ref_B = np.empty_like(t)
+    speed_ref_B[0] = np.nan
+    speed_ref_B[1:] = seg_len / dt_real
 
-# Arrays für Zeit, Theta, Referenzpunkte
-time_vals    = df.time.values
-v_theta_vals = df.v_theta.values
-ref_pts      = df[['ref_x', 'ref_y', 'ref_z']].values
+    # Gemeinsamer Plot
+    fig, ax1 = plt.subplots(figsize=(10,6))
 
-# MPC-Parameter (falls du sie ändern möchtest)
-T_HORIZON = 1.5
-N         = 40
-dt        = T_HORIZON / N
-freq      = 50
+    # linke Y‑Achse: Geschwindigkeiten
+    ax1.plot(t, df.speed_drone,   label='Drone Speed', color='black', linewidth=1.5)
+    ax1.plot(t, speed_ref_A,      label='Ref‑Speed (Course Speed for the complete course) / V_theta', linestyle='--')
+    ax1.plot(t, speed_ref_B,      label='Ref‑Speed (Δs/Δt)', linestyle='-.')
+    ax1.set_xlabel('Zeit [s]')
+    ax1.set_ylabel('Geschwindigkeit [m/s]')
+    ax1.grid(alpha=0.3)
 
-# ------------------------------------------------------------------
-# 3) Länge des Referenzpfads berechnen
-# ------------------------------------------------------------------
-d_ref = np.diff(ref_pts, axis=0)
-segment_lengths = np.linalg.norm(d_ref, axis=1)
-path_length = segment_lengths.sum()
-print(f"Gesamtlänge Referenzpfad: {path_length:.3f} m")
+    # rechte Y‑Achse: curvature
+    ax2 = ax1.twinx()
+    ax2.plot(t, curvature, color='magenta', linestyle=':', label='curvature')
+    ax2.set_ylabel('Krümmung')
 
-# ------------------------------------------------------------------
-# 4) Ref-Speed Variante A (ideal)
-# ------------------------------------------------------------------
-# t = 1/(v_theta * dt * freq)
-t_vals = 1.0 / (v_theta_vals * dt * freq)
-speed_ref_A = path_length / t_vals
+    # Kombinierte Legende
+    lines1, labels1 = ax1.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax1.legend(lines1 + lines2, labels1 + labels2, loc='upper right')
 
-# ------------------------------------------------------------------
-# 5) Ref-Speed Variante B (Δs/Δt)
-# ------------------------------------------------------------------
-dt_real     = np.diff(time_vals)
-speed_ref_B = np.empty_like(time_vals)
-speed_ref_B[0] = np.nan
-speed_ref_B[1:] = segment_lengths / dt_real
+    ax1.set_title('Drone Speed, Ref‑Speed A (L/t), Ref‑Speed B (Δs/Δt) und Curvature')
 
-# Durchschnitt der gemessenen Referenzgeschwindigkeit
-avg_speed_ref_B = np.nanmean(speed_ref_B)
-print(f"Durchschnittliche Ref-Speed B: {avg_speed_ref_B:.2f} m/s")
+    plt.tight_layout()
+    out = run_dir / "speed_plot_combined.png"
+    fig.savefig(out, dpi=200, bbox_inches='tight')
+    plt.close(fig)
+    print(f"➔ Combined-Speed‑Plot abgelegt: {out}")
 
-# ------------------------------------------------------------------
-# 6) Gates einlesen und Zeitpunkte bestimmen
-# ------------------------------------------------------------------
-gates_df = pd.read_csv(gates_csv)
-gate_times = []
-for _, gate in gates_df.iterrows():
-    gate_pos = np.array([gate.x, gate.y, gate.z])
-    dists = np.linalg.norm(ref_pts - gate_pos, axis=1)
-    idx_closest = np.argmin(dists)
-    gate_times.append((int(gate.gate_idx), time_vals[idx_closest]))
 
-# 7) Plotten aller Grafiken — jetzt nur noch 1 Reihe, 2 Spalten
-fig, axs = plt.subplots(1, 2, figsize=(14, 5))
-ax1, ax2 = axs
-
-# 7.1 Ideale Ref-Speed vs. Drohne
-ax1.plot(time_vals, speed_ref_A, label='Ref-Speed (L/t)', linewidth=1.2)
-ax1.plot(time_vals, df.speed_drone,       label='Drohne',     alpha=0.7)
-ax1.set_title('Ideale Ref-Speed vs. Drohne')
-ax1.set_xlabel('Zeit [s]')
-ax1.set_ylabel('Geschwindigkeit [m/s]')
-ax1.grid(True, alpha=0.3)
-ax1.legend()
-
-# 7.2 Gemessene Ref-Speed vs. Drohne + Gates + Durchschnitt
-ax2.plot(time_vals, speed_ref_B, label='Ref-Speed (Δs/Δt)', linewidth=1.2)
-ax2.plot(time_vals, df.speed_drone,       label='Drohne',          alpha=0.7)
-for gate_idx, gt in gate_times:
-    ax2.axvline(gt, color='gray', linestyle='--', alpha=0.6)
-    ax2.text(gt, ax2.get_ylim()[1]*0.9, f"G{gate_idx}",
-             rotation=90, va='top', ha='center', alpha=0.8)
-ax2.axhline(avg_speed_ref_B, color='blue', linestyle='-.', linewidth=1.5,
-            label=f'Durchschnitt {avg_speed_ref_B:.2f} m/s')
-ax2.text(0.99, avg_speed_ref_B, f"{avg_speed_ref_B:.2f} m/s",
-         va='center', ha='right', backgroundcolor='white', alpha=0.8)
-
-# Dynamische Y-Limits, kein overhang:
-ymax = max(np.nanmax(speed_ref_B), np.nanmax(df.speed_drone)) * 1.05
-ax2.set_ylim(0, ymax)
-
-ax2.set_title('Gemessene Ref-Speed vs. Drohne (mit Gates & Durchschnitt)')
-ax2.set_xlabel('Zeit [s]')
-ax2.set_ylabel('Geschwindigkeit [m/s]')
-ax2.grid(True, alpha=0.3)
-ax2.legend()
-
-plt.tight_layout()
-
-# Speichern
-out_png = os.path.join(run_dir, "speed_plot_top_only.png")
-fig.savefig(out_png, dpi=200, bbox_inches="tight")
-print(f"➔ Plot gespeichert unter: {out_png}")
+if __name__ == "__main__":
+    import sys
+    rd = Path(sys.argv[1]) if len(sys.argv)>1 else Path("logs/run_0000")
+    plot_speed(rd)

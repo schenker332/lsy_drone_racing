@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 from acados_template import AcadosOcp, AcadosOcpSolver
 from lsy_drone_racing.control.mpcc_progress_utils.mpcc_progress_quadrotor_ode_model import export_quadrotor_ode_model
-from lsy_drone_racing.control.helper.costfunction import contour_and_lag_error, get_min_distance_to_trajectory
+from lsy_drone_racing.control.helper.costfunction import contour_and_lag_error
 from casadi import DM, sum1
 
 
@@ -33,7 +33,7 @@ def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosO
     
 
     e_c, e_l= contour_and_lag_error(ocp.model)
-    min_distance = get_min_distance_to_trajectory(ocp.model)  # Get minimum distance to trajectory
+
 
 
     p = ocp.model.p

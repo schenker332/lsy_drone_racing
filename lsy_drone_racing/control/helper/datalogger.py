@@ -4,28 +4,9 @@ from datetime import datetime
 import numpy as np
 
 class DataLogger:
-    def __init__(self, log_dir="logs"):
+    def __init__(self):
         """Initializes the logger, creating a unique directory for the current run."""
-        # Create a timestamped directory for the current run
-        current_time = datetime.now().strftime('%Y%m%d_%H%M%S')
-        self.run_dir = os.path.join(log_dir, f"run_{current_time}")
-        os.makedirs(self.run_dir, exist_ok=True)
 
-        # Define file paths
-        self.state_log_file = os.path.join(self.run_dir, "state_log.csv")
-        self.control_log_file = os.path.join(self.run_dir, "control_log.csv")
-        self.weight_log_file = os.path.join(self.run_dir, "weight_log.csv")  # NEW
-        self.gates_log_file = os.path.join(self.run_dir, "final_gates.csv")
-        self.obstacles_log_file = os.path.join(self.run_dir, "final_obstacles.csv")
-
-        # Track min/max weights for analysis
-        self.min_weight = float('inf')
-        self.max_weight = float('-inf')
-
-        # Prepare the log files with headers
-        self._prepare_state_log()
-        self._prepare_control_log()
-        self._prepare_weight_log()  # NEW
 
     def _prepare_state_log(self):
         """Opens the state log CSV and writes the header row."""
@@ -34,9 +15,9 @@ class DataLogger:
         header = [
             "time", "px", "py", "pz", "vx", "vy", "vz", 
             "roll", "pitch", "yaw", "f_collective", "f_collective_cmd", 
-            "r_cmd", "p_cmd", "y_cmd", "theta", "v_theta",
+            "r_cmd", "p_cmd", "y_cmd",
             "ref_x", "ref_y", "ref_z",
-            "curvature", "min_dist_to_traj"  # NEW: Add curvature and distance
+            "curvature", "v_theta" # NEW: Add curvature to the state log
         ]
         self.state_writer.writerow(header)
 
@@ -66,7 +47,7 @@ class DataLogger:
         control_vector: np.ndarray = None,
         ref_point: np.ndarray = None,
         curvature: float = None,  # NEW
-        min_dist: float = None,   # NEW
+        v_theta: float = None  # NEW: Assuming v_theta is a class attribute
     ):
         """Logs a single row of state data and optionally control data and ref-point."""
         # State-Daten
@@ -83,12 +64,9 @@ class DataLogger:
             log_data.append(f"{curvature:.6f}")
         else:
             log_data.append("")
-            
-        if min_dist is not None:
-            log_data.append(f"{min_dist:.6f}")
-        else:
-            log_data.append("")
-        
+
+        log_data.append(f"{v_theta:.6f}")  # Assuming v_theta is a class attribute
+
         self.state_writer.writerow(log_data)
         
         # Control-Daten wie bisher
@@ -149,27 +127,27 @@ class DataLogger:
                 for i, pos in enumerate(obstacles_pos):
                     writer.writerow([i] + list(pos))
 
-        # Add final weight statistics as rows at the end of the weight log file
-        if hasattr(self, 'weight_writer') and self.weight_writer:
-            # Write separator row
-            self.weight_writer.writerow(["--- FINAL STATISTICS ---", "", "", "", "", "", ""])
+        # # Add final weight statistics as rows at the end of the weight log file
+        # if hasattr(self, 'weight_writer') and self.weight_writer:
+        #     # Write separator row
+        #     self.weight_writer.writerow(["--- FINAL STATISTICS ---", "", "", "", "", "", ""])
             
-            # Write the final statistics as rows
-            self.weight_writer.writerow([
-                "FINAL_MIN_WEIGHT", 
-                f"{self.min_weight:.6f}", 
-                "", "", "", "", ""
-            ])
-            self.weight_writer.writerow([
-                "FINAL_MAX_WEIGHT", 
-                f"{self.max_weight:.6f}", 
-                "", "", "", "", ""
-            ])
-            self.weight_writer.writerow([
-                "FINAL_WEIGHT_RANGE", 
-                f"{self.max_weight - self.min_weight:.6f}", 
-                "", "", "", "", ""
-            ])
+        #     # Write the final statistics as rows
+        #     self.weight_writer.writerow([
+        #         "FINAL_MIN_WEIGHT", 
+        #         f"{self.min_weight:.6f}", 
+        #         "", "", "", "", ""
+        #     ])
+        #     self.weight_writer.writerow([
+        #         "FINAL_MAX_WEIGHT", 
+        #         f"{self.max_weight:.6f}", 
+        #         "", "", "", "", ""
+        #     ])
+        #     self.weight_writer.writerow([
+        #         "FINAL_WEIGHT_RANGE", 
+        #         f"{self.max_weight - self.min_weight:.6f}", 
+        #         "", "", "", "", ""
+        #     ])
 
     def close(self):
         """Closes any open file handles."""

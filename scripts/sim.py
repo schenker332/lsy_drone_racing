@@ -15,7 +15,7 @@ import fire
 import gymnasium
 from gymnasium.wrappers.jax_to_numpy import JaxToNumpy
 import time
-
+from plots.plot_speed import plot_speed
 
 
 from lsy_drone_racing.utils import  load_config, load_controller, draw_gates, draw_point, draw_obstacles, generate_parallel_lines,draw_line
@@ -30,6 +30,18 @@ logger = logging.getLogger(__name__)
 import warnings
 warnings.filterwarnings("ignore", message="Explicitly requested dtype float64.*")
 
+from datetime import datetime
+import os
+import csv
+from lsy_drone_racing.control.helper.datalogger import DataLogger
+### ======================= Logger ======================== ###
+timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+batch_dir = Path("logs") / f"batch_{timestamp}"
+batch_dir.mkdir(parents=True, exist_ok=True)    
+
+run_stats = []          # hier sammeln wir später Zeit + Gates pro Run
+successful_times = []   # für die Erfolgs‑Durchschnittszeit
+### ======================================================== ###
 
 
 
@@ -73,24 +85,42 @@ def simulate(
         track=config.env.track,
         disturbances=config.env.get("disturbances"),
         randomizations=config.env.get("randomizations"),
-        seed=config.env.seed, 
+        # seed=int(time.time()) % 100000,
+        seed=config.env.seed,
     )
     env = JaxToNumpy(env)
- #use this if everything shall be more randomized int(time.time()) % 100000
+
 
     ep_times = []
     try:
-        for _ in range(n_runs):  # Run n_runs episodes with the controller
+        for run_idx in range(1, n_runs + 1):          # ← jetzt mit Index
+
             obs, info = env.reset()
-            default_mass = env.unwrapped.drone_mass  # Standard-Masse
-            current_mass = env.unwrapped.sim.data.params.mass  # Randomisierte Masse
-            mass_deviation = current_mass - default_mass  # Abweichung
-            print(f"Drone mass - Default: {default_mass}, Deviation: {mass_deviation}, Total: {current_mass}")
+
+            default_mass   = env.unwrapped.drone_mass.item()          
+            current_mass   = env.unwrapped.sim.data.params.mass.item()  
+            mass_deviation = current_mass - default_mass
+            print(f"Drone mass – Default: {default_mass:.6f}, Deviation: {mass_deviation:.6f}, Total: {current_mass:.6f}")
+
             controller: Controller = controller_cls(obs, info, config)
+
+            ### ======================== Logger ======================== ###
+            run_dir = batch_dir / f"run_{run_idx}"
+            run_dir.mkdir(exist_ok=True)
+            if getattr(controller, "logger", None):
+                logger = controller.logger
+                logger.run_dir = str(run_dir)
+                logger.state_log_file = run_dir / "state_log.csv"
+                logger.control_log_file = run_dir / "control_log.csv"
+                logger.gates_log_file = run_dir / "final_gates.csv"
+                logger.obstacles_log_file = run_dir / "final_obstacles.csv"
+                logger._prepare_state_log()
+                logger._prepare_control_log()
+            ### ======================================================== ###
+
             visualizer = SimVisualizer()
             i = 0
 
-            env.unwrapped.sim.max_visual_geom = 5_000
 
             while True:
                 curr_time = i / config.env.freq
@@ -105,17 +135,58 @@ def simulate(
                 if config.sim.gui:
                     env.render()
 
-
                 if terminated or truncated or controller_finished:
                     break
                 i += 1
-            print(f"Drone mass - Default: {default_mass}, Deviation: {mass_deviation}, Total: {current_mass}")
-            controller.episode_callback(curr_time)  # Update the controller internal state and models.
+
+
             log_episode_stats(obs, info, config, curr_time)
             controller.episode_reset()
             visualizer.reset_episode()  # Reset visualizer for next episode
             ep_times.append(curr_time if obs["target_gate"] == -1 else None)
 
+            ### ======================== Logger ======================== ###
+            if controller.logger:
+                controller.logger.log_final_positions(
+                    gates_pos=controller._info.get("gates_pos"),
+                    obstacles_pos=controller._info.get("obstacles_pos")
+                )
+                controller.logger.close()
+
+            # Wenn Episode fertig:
+            gates_passed = obs["target_gate"]
+            if gates_passed == -1:
+                gates_passed = len(config.env.track.gates)
+
+            run_stats.append({"run": run_idx,
+                            "time": curr_time,
+                            "gates_passed": gates_passed,
+                            "mass": current_mass})
+
+            if gates_passed == len(config.env.track.gates):
+                successful_times.append(curr_time)
+
+            plot_speed(run_dir)
+            ### ======================================================== ###
+
+
+        ### ======================== Logger ======================== ###
+        summary_file = batch_dir / "summary.csv"
+        with open(summary_file, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["run", "time_sec", "gates_passed", "mass"])
+
+            for row in run_stats:
+                writer.writerow([row["run"], f"{row['time']:.3f}", row["gates_passed"], f"{row['mass']:.3f}"])
+
+            # Aggregierte Kennzahlen
+            successful_runs = len(successful_times)
+            avg_time = (sum(successful_times) / successful_runs) if successful_runs else None
+
+            writer.writerow([])  # Leerzeile als Trenner
+            writer.writerow(["successful_runs", successful_runs])
+            writer.writerow(["avg_time_successful", f"{avg_time:.3f}" if avg_time else "n/a"])
+        ### ======================================================== ###
 
 
     finally:

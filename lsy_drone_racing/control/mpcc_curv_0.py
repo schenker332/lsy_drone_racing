@@ -305,14 +305,14 @@ class MPController(Controller):
         self.freq = config.env.freq  # Control frequency
         self._tick = 0  # Simulation tick counter
 
-        # Toggle logging by setting this flag to True or False
+        ### ======================== Logger ======================== ###
         self.logging_enabled = True
         if  self.logging_enabled:
-            # Initialize logger
-            self.logger = DataLogger(log_dir="logs")
+            self.logger = DataLogger()
             self._last_log_time = -1
         else:
             self.logger = None
+        ### ======================================================== ###
 
         # --- MPC Parameters ---
         self.N = 20  # Number of discretization steps in the horizon
@@ -454,64 +454,35 @@ class MPController(Controller):
             )
         )
 
-        # Log state vector periodically
+        ### ======================== Logger ======================== ###
+        # Log state vector every 0.1 seconds
         if self.logger:
             current_time = self._tick / self.freq
+            # nur alle 0.01 s loggen
             if current_time - self._last_log_time >= 0.01:
-                
-                ### Leftover abandoned test calculate and update the curvature for a future theta
-                # calculate kappa over a larger horizon does not seem to make a big difference. tried for N 5-20
-                # prediction_step = 10
-                # theta_N10 = min(self.theta + prediction_step * self.v_theta * self.dt, 1.0)
-                # kappaN0 = self.curvature(self.theta)
-                # kappaN9 = self.curvature(theta_N10)
-                # kappa = (kappaN0 + kappaN9) / 2.0
-                 # print(f"Curv N=0: {kappaN0}, Curv N=9: {kappaN9}", "combined:", kappa)
+                ref_pt = np.array([self.cs_x(self.theta), self.cs_y(self.theta), self.cs_z(self.theta)])
+                u1 = self.acados_ocp_solver.get(1, "u")
 
-                # Calculate current curvature and distance
+
                 kappa = self.curvature(self.theta)
-
-               
-
-                
-                # Referenzpunkt auf der Trajektorie
-                ref_pt = np.array([
-                    self.cs_x(self.theta),
-                    self.cs_y(self.theta),
-                    self.cs_z(self.theta)
-                ])
-                
-                # Get current weight (this is what gets stored in p[6])
-                current_weight = self.weight_for_theta(self.theta)
-
-                # Use existing get_contour_lag_error function for error calculation
-                vis_data = self.get_contour_lag_error(obs["pos"])
-                e_contour_magnitude = np.linalg.norm(vis_data['e_c_vec'])
-                e_lag_magnitude = abs(vis_data['e_l_scalar'])
-                
-                try:
-                    u1 = self.acados_ocp_solver.get(1, "u")
-                    self.logger.log_state(
-                        current_time, xcurrent, u1, 
-                        ref_point=ref_pt, 
-                        curvature=kappa
-                    )
-                except:
-                    self.logger.log_state(
-                        current_time, xcurrent, 
-                        ref_point=ref_pt, 
-                        curvature=kappa
-                    )
-                
-                # Log weight data with actual error values
-                self.logger.log_weight_data(
-                    current_time, 
-                    current_weight,
-                    e_contour=e_contour_magnitude,
-                    e_lag=e_lag_magnitude
-                )
-                
+                self.logger.log_state(current_time, xcurrent, u1, ref_point=ref_pt, curvature=kappa, v_theta=self.v_theta)
                 self._last_log_time = current_time
+
+
+                # current_weight = self.weight_for_theta(self.theta)
+                # vis_data = self.get_contour_lag_error(obs["pos"])
+                # e_contour_magnitude = np.linalg.norm(vis_data['e_c_vec'])
+                # e_lag_magnitude = abs(vis_data['e_l_scalar'])
+                
+                # # Log weight data with actual error values    
+                # self.logger.log_weight_data(
+                #     current_time, 
+                #     current_weight,
+                #     e_contour=e_contour_magnitude,
+                #     e_lag=e_lag_magnitude
+                # )
+
+        ### ======================================================== ###
 
         # Set the initial state constraint for the OCP
         self.acados_ocp_solver.set(0, "lbx", xcurrent)

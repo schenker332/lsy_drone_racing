@@ -9,9 +9,7 @@ if TYPE_CHECKING:
 from lsy_drone_racing.control.mpcc_curv_1_utils.mpcc_curv_1_ocp_solver import create_ocp_solver
 from lsy_drone_racing.control.helper.print_output import print_output
 from lsy_drone_racing.control.helper.datalogger import DataLogger
-import pathlib
-import subprocess
-import sys
+
 
 
 # Set peak weights for the Gaussian-like cost function around each gate]
@@ -170,14 +168,14 @@ class MPController(Controller):
         self.freq = config.env.freq
         self._tick = 0
 
-        # Toggle logging by setting this flag to True or False
+        ### ======================== Logger ======================== ###
         self.logging_enabled = True
         if  self.logging_enabled:
-            # Initialize logger
-            self.logger = DataLogger(log_dir="logs")
+            self.logger = DataLogger()
             self._last_log_time = -1
         else:
             self.logger = None
+        ### ======================================================== ###
 
         # MPC parameters
         self.N = 20                   # Number of discretization steps
@@ -200,7 +198,7 @@ class MPController(Controller):
 
 
         self.theta = 0
-        t= 4.7
+        t= 6
         self.v_theta = 1/ (t * self.dt * self.freq) 
 
         dx   = self.cs_x.derivative(1)
@@ -254,39 +252,36 @@ class MPController(Controller):
         # Construct the current state vector for the MPC solver
         xcurrent = np.concatenate((obs["pos"], obs["vel"],  R.from_quat(obs["quat"]).as_euler("xyz", degrees=False), [self.last_f_collective, self.last_f_cmd], self.last_rpy_cmd) )
         
+
+        ### ======================== Logger ======================== ###
         # Log state vector every 0.1 seconds
         if self.logger:
             current_time = self._tick / self.freq
+            # nur alle 0.01 s loggen
             if current_time - self._last_log_time >= 0.01:
+                ref_pt = np.array([self.cs_x(self.theta), self.cs_y(self.theta), self.cs_z(self.theta)])
+                u1 = self.acados_ocp_solver.get(1, "u")
 
-                # Calculate current curvature and distance
+
                 kappa = self.curvature(self.theta)
-
-                # Referenzpunkt auf der Trajektorie
-                ref_pt = np.array([
-                    self.cs_x(self.theta),
-                    self.cs_y(self.theta),
-                    self.cs_z(self.theta)
-                ])
-                
-                try:
-                    u1 = self.acados_ocp_solver.get(1, "u")
-                    self.logger.log_state(
-                        current_time, xcurrent, u1, 
-                        ref_point=ref_pt, 
-                        curvature=kappa
-                    )
-                except:
-                    self.logger.log_state(
-                        current_time, xcurrent, 
-                        ref_point=ref_pt, 
-                        curvature=kappa
-                    )
-            
-                
+                self.logger.log_state(current_time, xcurrent, u1, ref_point=ref_pt, curvature=kappa, v_theta=self.v_theta)
                 self._last_log_time = current_time
+
+
+                # current_weight = self.weight_for_theta(self.theta)
+                # vis_data = self.get_contour_lag_error(obs["pos"])
+                # e_contour_magnitude = np.linalg.norm(vis_data['e_c_vec'])
+                # e_lag_magnitude = abs(vis_data['e_l_scalar'])
                 
-        
+                # # Log weight data with actual error values    
+                # self.logger.log_weight_data(
+                #     current_time, 
+                #     current_weight,
+                #     e_contour=e_contour_magnitude,
+                #     e_lag=e_lag_magnitude
+                # )
+
+        ### ======================================================== ###
                 
         self.acados_ocp_solver.set(0, "lbx", xcurrent)
         self.acados_ocp_solver.set(0, "ubx", xcurrent)
@@ -374,21 +369,8 @@ class MPController(Controller):
         Args:
             curr_time: Current simulation time.
         """
-        if self.logger:
-            self.logger.log_final_positions(
-                gates_pos=self._info.get("gates_pos"),
-                obstacles_pos=self._info.get("obstacles_pos")
-            )
-            self.logger.close()
-        # # -------------- Plot erzeugen ---------------------------------
-        # try:
-        #     plot_script = pathlib.Path("plots/plot_speed.py").resolve()   # Pfad anpassen, wenn nötig
-        #     subprocess.run(
-        #         [sys.executable, str(plot_script), str(self.logger.run_dir)],
-        #         check=True
-        #     )
-        # except Exception as e:
-        #     print(f"[WARN] Speed-Plot konnte nicht erzeugt werden: {e}")
+        pass
+
 
     def get_trajectory(self) -> NDArray[np.floating]:
         return self._trajectory_history
@@ -467,8 +449,11 @@ class MPController(Controller):
             'ref_point': ref_point,
             't_hat_scaled': t_hat_scaled,
             'e_l_vis': e_l_vis,
-            'e_c_vis': e_c_vis
-        }
+            'e_c_vis': e_c_vis,
+            'e_c_vec': e_c_vec,
+            'e_l_scalar': e_l_scalar
+
+            }
 
     def _handle_unified_update(self, obs: dict[str, NDArray[np.floating]]):
         """Handles both gate and obstacle changes with unified response mapping."""

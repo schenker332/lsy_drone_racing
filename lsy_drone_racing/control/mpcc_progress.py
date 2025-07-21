@@ -173,14 +173,14 @@ class MPController(Controller):
         self.freq = config.env.freq
         self._tick = 0
 
-        # Toggle logging by setting this flag to True or False
+        ### ======================== Logger ======================== ###
         self.logging_enabled = True
-        if self.logging_enabled:
-            # Initialize logger
-            self.logger = DataLogger(log_dir="logs")
+        if  self.logging_enabled:
+            self.logger = DataLogger()
             self._last_log_time = -1
         else:
             self.logger = None
+        ### ======================================================== ###
 
         # MPC parameters
         self.N = 50                   #50
@@ -205,6 +205,22 @@ class MPController(Controller):
         self.theta = 0.0  # Current theta value (progress along trajectory)
         t= 3.6
         self.v_theta = 1/ (t * self.dt * self.freq) ## from niclas with 6 or 7
+
+        dx   = self.cs_x.derivative(1)
+        ddx  = self.cs_x.derivative(2)
+        dy   = self.cs_y.derivative(1)
+        ddy  = self.cs_y.derivative(2)
+        dz   = self.cs_z.derivative(1)
+        ddz  = self.cs_z.derivative(2)
+
+        def curvature(theta):
+            v = np.array([dx(theta), dy(theta), dz(theta)])
+            a = np.array([ddx(theta), ddy(theta), ddz(theta)])
+            num = np.linalg.norm(np.cross(v, a))
+            den = np.linalg.norm(v)**3 + 1e-8
+            return num/den
+        
+        self.curvature = curvature  
 
 
 
@@ -250,43 +266,41 @@ class MPController(Controller):
 
         min_dist,_,min_theta = self.compute_min_distance_to_trajectory(obs["pos"])
 
-        self.pos = obs["pos"]
+
         # update trajectory
         self._handle_unified_update(obs)
 
+
+        ### ======================== Logger ======================== ###
+        # Log state vector every 0.1 seconds
         if self.logger:
             current_time = self._tick / self.freq
+            # nur alle 0.01 s loggen
             if current_time - self._last_log_time >= 0.01:
-                
-                
-                # Reference point on trajectory
-                ref_pt = np.array([
-                    self.cs_x(self.theta),
-                    self.cs_y(self.theta),
-                    self.cs_z(self.theta)
-                ])
-                
-                try:
-                    # Try to get control vector if solver has run
-                    u1 = self.acados_ocp_solver.get(1, "u")
-                    self.logger.log_state(
-                        current_time, xcurrent, u1, 
-                        ref_point=ref_pt, 
-                        curvature=-1,
-                        min_dist=min_dist
-                    )
-                except:
-                    # First iteration, no control yet
-                    self.logger.log_state(
-                        current_time, 
-                        xcurrent, 
-                        ref_point=ref_pt, 
-                        curvature=-1,
-                        min_dist=min_dist
-                    )
-                
-                
+                ref_pt = np.array([self.cs_x(self.theta), self.cs_y(self.theta), self.cs_z(self.theta)])
+                u1 = self.acados_ocp_solver.get(1, "u")
+
+
+                kappa = self.curvature(self.theta)
+                # Exclude last two entries of xcurrent when logging
+                self.logger.log_state(current_time, xcurrent[:-2], u1, ref_point=ref_pt, curvature=kappa, v_theta=self.v_theta)
                 self._last_log_time = current_time
+
+
+                # current_weight = self.weight_for_theta(self.theta)
+                # vis_data = self.get_contour_lag_error(obs["pos"])
+                # e_contour_magnitude = np.linalg.norm(vis_data['e_c_vec'])
+                # e_lag_magnitude = abs(vis_data['e_l_scalar'])
+                
+                # # Log weight data with actual error values    
+                # self.logger.log_weight_data(
+                #     current_time, 
+                #     current_weight,
+                #     e_contour=e_contour_magnitude,
+                #     e_lag=e_lag_magnitude
+                # )
+
+        ### ======================================================== ###
 
 
 
