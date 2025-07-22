@@ -7,7 +7,14 @@ from lsy_drone_racing.control.helper.costfunction import contour_and_lag_error
 from casadi import DM, sum1
 
 
-def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosOcpSolver, AcadosOcp]:
+from ml_collections import ConfigDict
+def create_ocp_solver(
+    Tf: float,
+    N: int,
+    mpc_cfg: ConfigDict,   # ← hier dein Config‐Objekt
+    verbose: bool = False
+) -> tuple[AcadosOcpSolver, AcadosOcp]:
+    
     """Create an optimal control problem solver for the quadrotor MPC.
     
     Args:
@@ -20,7 +27,7 @@ def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosO
     """
 
     ocp = AcadosOcp()
-    
+    mcfg = mpc_cfg  # MPC configuration from the config file
     # Set up the dynamic model
     ocp.model = export_quadrotor_ode_model()
     ocp.json_file = f"{ocp.model.name}.json"
@@ -46,13 +53,14 @@ def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosO
 
     q_c = 70 # contour error 
     q_l = 60 # lag error
-    mu = 0.008  # progress 0.0015 
+    mu = mcfg.mu # progress 0.0015 
     q_min = p[6]  # gaussian weight
 
     # # Maximum progress velocity for real world deployment, flies stable in real about 6/10 in sim
     # max_v_theta = 0.14  # maximum progress velocity
     # Maximum progress velocity for simulation, flies stable in sim about 8/10
-    max_v_theta = 0.13  # maximum progress velocity
+    # max_v_theta = 0.13  # maximum progress velocity
+    max_v_theta = mpc_cfg.max_v_theta  # maximum progress velocity from config
     
     dv_theta_max = 0.35  # maximum progress acceleration
 

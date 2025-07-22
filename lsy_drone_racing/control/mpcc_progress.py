@@ -14,13 +14,13 @@ from datetime import datetime
 
 # Sigma defines how much we stretch the Peak weights at each gate
 GATE_WEIGHT_CONFIG = {
-    0: {"peak_weight": 75, "sigma": 0.04},  # Gate 0: narrow peak
-    1: {"peak_weight": 75, "sigma": 0.02},  # Gate 1: wider peak
-    2: {"peak_weight": 75, "sigma": 0.08},  # Gate 2: narrow peak
-    3: {"peak_weight": 120, "sigma": 0.04}  # Gate 3: very narrow, high peak
+    0: {"peak_weight": 300, "sigma": 0.04},  # Gate 0: narrow peak
+    1: {"peak_weight": 300, "sigma": 0.04},  # Gate 1: wider peak
+    2: {"peak_weight": 300, "sigma": 0.04},  # Gate 2: narrow peak
+    3: {"peak_weight": 300, "sigma": 0.04}  # Gate 3: very narrow, high peak
 }
 
-# self.gate_peak_weights = [75, 75, 75, 120]
+
 
 class MPController(Controller):
     """Model Predictive Controller using collective thrust and attitude interface."""
@@ -37,7 +37,7 @@ class MPController(Controller):
         ### ====================================================================== ###
         ### =========================== Waypoints ================================ ###
         ### ====================================================================== ###
-
+        mcfg = config.mpc
         # Gate-Posittions better for simulation
         gates = np.array([
             [0.45, -0.50, 0.56],  # Gate 0      [0.45, -0.5, 0.56]
@@ -58,7 +58,7 @@ class MPController(Controller):
         # Gate 0 -- Gate 1
         b1 = np.array([
             [0.25, -0.7, 0.65],  # [0.2, -0.7, 0.65],
-            # [0.1, -1.0, 0.75],
+            [0.1, -1.0, 0.75],
             [0.5, -1.5, 0.8]
         ])
         
@@ -72,7 +72,7 @@ class MPController(Controller):
         b3 = np.array([
             [-0.2, 1.4, 0.66],
             [-0.97, 1.3, 0.8],      #[-0.9, 1.3, 0.8],
-            #[-0.75, 0.5, 1.11]   
+            [-0.75, 0.5, 1.11]   
             # -                     #[-0.85, 0.5, 0.9]  
         ])
 
@@ -150,7 +150,9 @@ class MPController(Controller):
             ("b1.2", 1.0, 1.0, 0.0, [0.0, 0.0, 0.0]),  # Block 1, Waypoint 2
             ],
 
-            #add reaction to obstacle 2 from top of tree ?
+            "o2": [  # Wenn sich Obstacle 2 ändert  
+            ("b3.0", 1.0, 1.0, 0.0, [0.0, 0.0, 0.0]),  # Block 2, Waypoint 1
+            ],
 
             "o3": [  # Wenn sich Obstacle 3 ändert
             ("b3.2", 2.0, 2.0, 0.0, [0.0, 0.0, 0.0]),  # Block 3, Waypoint 2 (at obstacle 4)
@@ -203,7 +205,7 @@ class MPController(Controller):
 
 
         self.theta = 0.0  # Current theta value (progress along trajectory)
-        t= 3.6
+        t= mcfg.t_scaling
         self.v_theta = 1/ (t * self.dt * self.freq) ## from niclas with 6 or 7
 
         dx   = self.cs_x.derivative(1)
@@ -227,15 +229,22 @@ class MPController(Controller):
         self.gate_thetas = [ts[i] for i in gate_indices]
 
 
-        self.gate_peak_weights = [GATE_WEIGHT_CONFIG[i]["peak_weight"] for i in range(4)]
+        # self.gate_peak_weights = [GATE_WEIGHT_CONFIG[i]["peak_weight"] for i in range(4)]
+        self.gate_peak_weights = [mcfg.peak_weight, mcfg.peak_weight, mcfg.peak_weight, mcfg.peak_weight]  
         self.gate_sigmas = [GATE_WEIGHT_CONFIG[i]["sigma"] for i in range(4)]
 
 
 
         # Create the optimal control problem solver
-        self.acados_ocp_solver, self.ocp = create_ocp_solver(self.T_HORIZON, self.N)
+        self.acados_ocp_solver, self.ocp = create_ocp_solver(
+            self.T_HORIZON,
+            self.N,
+            config.mpc,       # ← übergib hier dein ConfigDict mit max_v_theta etc.
+            verbose=False
+        )
 
-        self.base_weight = 70   
+
+        self.base_weight = mcfg.base_weight  # Base weight for the cost function  
         
 
 
@@ -651,7 +660,7 @@ class MPController(Controller):
             diff = (theta - gate_theta) / sigma  # self.sigma controls the width of the peak
             # Compute the Gaussian-shaped influence of this gate
             gate_influence = abs(peak_weight - self.base_weight) * np.exp(-0.5 * diff * diff)
-            print(f"Peak weight={peak_weight}, Base weight={self.base_weight}, Gate influence={gate_influence}")
+            # print(f"Peak weight={peak_weight}, Base weight={self.base_weight}, Gate influence={gate_influence}")
             # The weight at this theta is the maximum of the base weight and all gate influences
             w = max(w, self.base_weight + gate_influence)
         # Return the final weight for this theta

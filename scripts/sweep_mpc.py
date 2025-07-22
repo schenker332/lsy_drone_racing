@@ -21,10 +21,11 @@ from scripts.sim import simulate
 
 def sweep(
     param_ranges: list[str] = [
-        "t_scaling:4.0:8.6:20",
-        "alpha_curv_speed:0.00:0.20:10",
+        "t_scaling:4.3:5.3:5",  # t_scaling from 4.0 to 6.0 in 5 steps
+        "alpha_curv_speed:0.05:0.15:5",  #
+
     ],
-    runs_per_val: int      = 20,
+    runs_per_val: int      = 50,
     config: str            = "level2.toml",
     controller: str | None = None,
     gui: bool | None       = False,

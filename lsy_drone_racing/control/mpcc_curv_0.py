@@ -83,7 +83,7 @@ class MPController(Controller):
         """
         super().__init__(obs, info, config)
 
-        
+        mcfg = config.mpc
         ### ====================================================================== ###
         ### =========================== Waypoints ================================ ###
         ### ====================================================================== ###
@@ -335,9 +335,10 @@ class MPController(Controller):
         # --- Trajectory Progress ---
         self.theta = 0.0  # Progress along the trajectory (0 to 1)
         # Time to complete the trajectory, affects the base progress speed
-        t = 5.5
+        t = mcfg.t_scaling
         self.v_theta = max(1 / (t * self.dt * self.freq), V_THETA_MAX)  # Base rate of progress
         self.base_v_theta = self.v_theta
+        self.alpha_curv_speed = mcfg.alpha_curv_speed  # Speed adjustment factor based on curvature 
 
         # --- Curvature Calculation ---
         # Derivatives of the spline for curvature calculation
@@ -501,8 +502,8 @@ class MPController(Controller):
 
 
         kappa = self.curvature(self.theta)
-        alpha = 0.12  # Curvature influence factor
-        self.v_theta = self.base_v_theta / (1 + alpha * kappa)
+
+        self.v_theta = self.base_v_theta / (1 + self.alpha_curv_speed * kappa)
 
 
 
