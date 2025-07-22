@@ -34,6 +34,8 @@ class MPController(Controller):
             config: Configuration of the environment.
         """
         super().__init__(obs, info, config)
+        # Hol dir die beiden Werte
+        mcfg = config.mpc
 
         
         ### ====================================================================== ###
@@ -197,8 +199,9 @@ class MPController(Controller):
         self._last_obstacles_pos = None  # Store previous obstacle positions
 
 
+
         self.theta = 0
-        t= 6
+        t= mcfg.t_scaling
         self.v_theta = 1/ (t * self.dt * self.freq) 
 
         dx   = self.cs_x.derivative(1)
@@ -215,7 +218,9 @@ class MPController(Controller):
             den = np.linalg.norm(v)**3 + 1e-8
             return num/den
         
-        self.curvature = curvature    
+
+        self.curvature = curvature
+        self.alpha_curv_speed = mcfg.alpha_curv_speed    
         self.base_v_theta = self.v_theta
 
         # Automatische Gate-Thetas basierend auf berechneten Indizes
@@ -294,8 +299,8 @@ class MPController(Controller):
         self._handle_unified_update(obs)
 
         κ = self.curvature(self.theta)
-        alpha = 0.12
-        self.v_theta = self.base_v_theta / (1 + alpha * κ)
+        
+        self.v_theta = self.base_v_theta / (1 + self.alpha_curv_speed * κ)
 
 
 

@@ -1,0 +1,5 @@
+[mpc]
+
+t_scaling        = 6.0
+alpha_curv_speed = 0.12
+    

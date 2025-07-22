@@ -34,6 +34,7 @@ from datetime import datetime
 import os
 import csv
 from lsy_drone_racing.control.helper.datalogger import DataLogger
+from ml_collections import ConfigDict             # <<--- hier richtig importieren
 ### ======================= Logger ======================== ###
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 batch_dir = Path("logs") / f"batch_{timestamp}"
@@ -42,8 +43,17 @@ batch_dir.mkdir(parents=True, exist_ok=True)
 run_stats = []          # hier sammeln wir später Zeit + Gates pro Run
 successful_times = []   # für die Erfolgs‑Durchschnittszeit
 ### ======================================================== ###
-
-
+import tomli
+def load_mpc_config(config_dir: Path) -> ConfigDict:
+    """
+    Lädt 'config/mpc.toml' und gibt den Unter-Abschnitt [mpc] zurück.
+    """
+    toml_path = config_dir / "mpc.toml"
+    if not toml_path.exists():
+        raise FileNotFoundError(f"mpc.toml nicht gefunden unter {toml_path}")
+    with open(toml_path, "rb") as f:
+        raw = tomli.load(f)
+    return ConfigDict(raw["mpc"])  # jetzt funktioniert ConfigDict
 
 
 
@@ -52,6 +62,8 @@ def simulate(
     controller: str | None = None,
     n_runs: int = 1,
     gui: bool | None = None,
+    param_overrides: dict[str, float] | None = None,
+    return_stats: bool = False
 ) -> list[float]:
     """Evaluate the drone controller over multiple episodes.
 
@@ -65,16 +77,33 @@ def simulate(
     Returns:
         A list of episode times.
     """
-    # Load configuration and check if firmare should be used.
-    config = load_config(Path(__file__).parents[1] / "config" / config)
-    if gui is None:
-        gui = config.sim.gui
-    else:
+    project_root = Path(__file__).parents[1]
+    config_dir   = project_root / "config"
+
+    # 1) Umgebungs‑Config einmalig laden
+    config = load_config(config_dir / config)
+
+    # 2) MPC‑Parameter hinzufügen
+    config.mpc = load_mpc_config(config_dir)
+
+    # 3) GUI‑Override (falls vom CLI übergeben)
+    if gui is not None:
         config.sim.gui = gui
-    # Load the controller module
-    control_path = Path(__file__).parents[1] / "lsy_drone_racing/control"
-    controller_path = control_path / (controller or config.controller.file)
-    controller_cls = load_controller(controller_path)  # This returns a class, not an instance
+
+    # 4) Controller‑Klasse ermitteln
+    control_path   = project_root / "lsy_drone_racing" / "control"
+    ctrl_filename  = controller or config.controller.file
+    controller_cls = load_controller(control_path / ctrl_filename)
+
+    # 1.2) Parameter‑Overrides anwenden
+    if param_overrides:
+        for k, v in param_overrides.items():
+            if hasattr(config.mpc, k):
+                setattr(config.mpc, k, v)
+            else:
+                raise KeyError(f"Unknown MPC parameter: {k}")
+
+    
     # Create the racing environment
     env: DroneRaceEnv = gymnasium.make(
         config.env.id,
@@ -91,7 +120,8 @@ def simulate(
     env = JaxToNumpy(env)
 
 
-    ep_times = []
+    ep_times    = []
+    total_gates = len(config.env.track.gates)
     try:
         for run_idx in range(1, n_runs + 1):          # ← jetzt mit Index
 
@@ -143,7 +173,6 @@ def simulate(
             log_episode_stats(obs, info, config, curr_time)
             controller.episode_reset()
             visualizer.reset_episode()  # Reset visualizer for next episode
-            ep_times.append(curr_time if obs["target_gate"] == -1 else None)
 
             ### ======================== Logger ======================== ###
             if controller.logger:
@@ -166,11 +195,17 @@ def simulate(
             if gates_passed == len(config.env.track.gates):
                 successful_times.append(curr_time)
 
+
+
+            ep_times.append(curr_time if gates_passed == total_gates else None)
             plot_speed(run_dir)
             ### ======================================================== ###
 
 
         ### ======================== Logger ======================== ###
+
+
+
         summary_file = batch_dir / "summary.csv"
         with open(summary_file, "w", newline="") as f:
             writer = csv.writer(f)
@@ -193,10 +228,12 @@ def simulate(
         # Sicherstellen, dass die Umgebung immer ordnungsgemäß geschlossen wird
         env.close()
         print("Umgebung erfolgreich geschlossen.")
+
         
-    return ep_times
-
-
+    if return_stats:
+        return run_stats
+    else:
+        return ep_times
 
 
 
