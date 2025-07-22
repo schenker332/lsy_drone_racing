@@ -102,6 +102,8 @@ def simulate(
                 setattr(config.mpc, k, v)
             else:
                 raise KeyError(f"Unknown MPC parameter: {k}")
+            
+            
 
     
     # Create the racing environment
@@ -130,7 +132,7 @@ def simulate(
             default_mass   = env.unwrapped.drone_mass.item()          
             current_mass   = env.unwrapped.sim.data.params.mass.item()  
             mass_deviation = current_mass - default_mass
-            print(f"Drone mass – Default: {default_mass:.6f}, Deviation: {mass_deviation:.6f}, Total: {current_mass:.6f}")
+            # print(f"Drone mass – Default: {default_mass:.6f}, Deviation: {mass_deviation:.6f}, Total: {current_mass:.6f}")
 
             controller: Controller = controller_cls(obs, info, config)
 

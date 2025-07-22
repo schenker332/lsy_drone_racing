@@ -21,11 +21,10 @@ from scripts.sim import simulate
 
 def sweep(
     param_ranges: list[str] = [
-        "t_scaling:4.3:5.3:5",  # t_scaling from 4.0 to 6.0 in 5 steps
-        "alpha_curv_speed:0.05:0.15:5",  #
-
+        "peak_weight:400:600:15 ",
+        "sigma:0.0005:0.004:15"
     ],
-    runs_per_val: int      = 50,
+    runs_per_val: int      = 100,
     config: str            = "level2.toml",
     controller: str | None = None,
     gui: bool | None       = False,
@@ -34,7 +33,11 @@ def sweep(
     ranges: dict[str, np.ndarray] = {}
     for pr in param_ranges:
         name, start, stop, steps = pr.split(":")
-        ranges[name] = np.linspace(float(start), float(stop), int(steps))
+        if name == "N":
+            ranges[name] = np.linspace(int(start), int(stop), int(steps), dtype=int)
+        else:
+            ranges[name] = np.linspace(float(start), float(stop), int(steps))
+
 
     keys   = list(ranges.keys())
     combos = itertools.product(*(ranges[k] for k in keys))
@@ -54,7 +57,11 @@ def sweep(
 
         # sweep loop
         for combo in combos:
-            overrides = {keys[i]: float(combo[i]) for i in range(len(keys))}
+            overrides = {
+                k: (int(v) if k == "N" else float(v))
+                for k, v in zip(keys, combo)
+            }
+
             print(f"→ Sweeping with {overrides}")
 
             # simulate returns List[{"run", "gates_passed", "time", ...}, ...]

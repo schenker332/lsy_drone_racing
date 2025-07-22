@@ -142,12 +142,17 @@ class MPController(Controller):
 
             "g3": [  # Wenn sich Gate 3 ändert
             ("g3", 1.0, 1.0, 1.0, [0.0, 0.0, 0.0]),    # Gate 3 selbst mit Offset
+            ("b4.0", 1.0, 1.0, 1.0, [0.0, 0.0, 0.0]),  # Block 3, Waypoint 0 (at obstacle 1)
             ],
 
             "o1": [  # Wenn sich Obstacle 1 ändert  
             ("b1.0", 1.0, 1.0, 0.0, [0.0, 0.0, 0.0]),  # Block 1, Waypoint 0 (at obstacle 2)
             ("b1.1", 1.0, 1.0, 0.0, [0.0, 0.0, 0.0]),  # Block 1, Waypoint 1
             ("b1.2", 1.0, 1.0, 0.0, [0.0, 0.0, 0.0]),  # Block 1, Waypoint 2
+            ],
+
+            "o2": [  # Wenn sich Obstacle 2 ändert  
+            ("b3.0", 1.0, 1.0, 0.0, [0.0, 0.0, 0.0]),  # Block 2, Waypoint 1
             ],
 
             "o3": [  # Wenn sich Obstacle 3 ändert
@@ -180,8 +185,8 @@ class MPController(Controller):
         ### ======================================================== ###
 
         # MPC parameters
-        self.N = 20                   # Number of discretization steps
-        self.T_HORIZON = 0.6           # Time horizon in seconds
+        self.N = mcfg.N                   # Number of discretization steps
+        self.T_HORIZON = mcfg.T_HORIZON   # Time horizon in seconds
         self.dt = self.T_HORIZON / self.N  # Step size
 
         # Initialize state variables    
@@ -227,15 +232,20 @@ class MPController(Controller):
         self.gate_thetas = [ts[i] for i in gate_indices]
 
          # Extract peax wewights and peak sigmas from the configuration
-        self.gate_peak_weights = [GATE_WEIGHT_CONFIG[i]["peak_weight"] for i in range(4)]
-        self.gate_sigmas = [GATE_WEIGHT_CONFIG[i]["sigma"] for i in range(4)]
+        # self.gate_peak_weights = [GATE_WEIGHT_CONFIG[i]["peak_weight"] for i in range(4)]
+        # self.gate_sigmas = [GATE_WEIGHT_CONFIG[i]["sigma"] for i in range(4)]
+        self.gate_peak_weights = [mcfg.peak_weight, mcfg.peak_weight, mcfg.peak_weight, mcfg.peak_weight] 
+        self.gate_sigmas = [mcfg.sigma, mcfg.sigma, mcfg.sigma, mcfg.sigma]
 
-        self.base_weight = 130.0
+        self.base_weight = mcfg.base_weight 
 
         # Create the optimal control problem solver
-        self.acados_ocp_solver, self.ocp = create_ocp_solver(self.T_HORIZON, self.N)
-
-
+        self.acados_ocp_solver, self.ocp = create_ocp_solver(
+            self.T_HORIZON,
+            self.N,
+            config.mpc,       # ← übergib hier dein ConfigDict mit max_v_theta etc.
+            verbose=False
+        )
 
 
 

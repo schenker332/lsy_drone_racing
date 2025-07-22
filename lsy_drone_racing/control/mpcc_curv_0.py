@@ -24,10 +24,10 @@ GATE_ORTHOGONAL_CONFIG = {
 # Set peak weights for the Gaussian-like cost function around each gate]
 # Set individual sigma values for each gate (controls the width of the Gaussian peak); 0.01 5% is of the norm scale
 GATE_WEIGHT_CONFIG = {
-    0: {"peak_weight": 1500, "sigma": 0.04},   # Gate 0: narrow peak
-    1: {"peak_weight": 300, "sigma": 0.02}, # Gate 1: wider peak  
-    2: {"peak_weight": 1500, "sigma": 0.08},  # Gate 2: narrow peak
-    3: {"peak_weight": 300, "sigma": 0.04}  # Gate 3: very narrow, high peak
+    0: {"peak_weight": 500, "sigma": 0.04},   # Gate 0: narrow peak
+    1: {"peak_weight": 500, "sigma": 0.04}, # Gate 1: wider peak  
+    2: {"peak_weight": 500, "sigma": 0.04},  # Gate 2: narrow peak
+    3: {"peak_weight": 500, "sigma": 0.04}  # Gate 3: very narrow, high peak
 }
 
 V_THETA_MAX = 0.13  # Base rate of progress, can be adjusted dynamically
@@ -415,7 +415,8 @@ class MPController(Controller):
                 self.gate_thetas.append(theta_center)
 
          # Extract peax wewights and peak sigmas from the configuration
-        self.gate_peak_weights = [GATE_WEIGHT_CONFIG[i]["peak_weight"] for i in range(4)]
+        # self.gate_peak_weights = [GATE_WEIGHT_CONFIG[i]["peak_weight"] for i in range(4)]
+        self.gate_peak_weights = [mcfg.peak_weight, mcfg.peak_weight, mcfg.peak_weight, mcfg.peak_weight]  
         self.gate_sigmas = [GATE_WEIGHT_CONFIG[i]["sigma"] for i in range(4)]
 
         # --- OCP Solver Setup ---
@@ -423,7 +424,7 @@ class MPController(Controller):
 
         # --- Contouring Cost Weighting ---
         # Base weight for the contouring error cost
-        self.base_weight = 130.0
+        self.base_weight = 10
         # Sigma for the Gaussian-like weight distribution around gates
 
     def compute_control(

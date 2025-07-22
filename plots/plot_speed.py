@@ -78,7 +78,7 @@ def plot_speed(run_dir: Path | str) -> None:
     out = run_dir / "speed_plot_combined.png"
     fig.savefig(out, dpi=200, bbox_inches='tight')
     plt.close(fig)
-    print(f"➔ Combined-Speed‑Plot abgelegt: {out}")
+    # print(f"➔ Combined-Speed‑Plot abgelegt: {out}")
 
 
 if __name__ == "__main__":

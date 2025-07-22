@@ -51,8 +51,8 @@ def create_ocp_solver(
     ocp.cost.cost_type_e = 'EXTERNAL'
     
 
-    q_c = 70 # contour error 
-    q_l = 60 # lag error
+
+    q_l = mcfg.q_l  # Lag error weight
     mu = mcfg.mu # progress 0.0015 
     q_min = p[6]  # gaussian weight
 

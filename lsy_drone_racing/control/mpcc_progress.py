@@ -155,7 +155,7 @@ class MPController(Controller):
             ],
 
             "o3": [  # Wenn sich Obstacle 3 ändert
-            ("b3.2", 2.0, 2.0, 0.0, [0.0, 0.0, 0.0]),  # Block 3, Waypoint 2 (at obstacle 4)
+            ("b3.2", 1.5, 1.5, 0.0, [0.0, 0.0, 0.0]),  # Block 3, Waypoint 2 (at obstacle 4)
             ],
         }
         
@@ -185,8 +185,8 @@ class MPController(Controller):
         ### ======================================================== ###
 
         # MPC parameters
-        self.N = 50                   #50
-        self.T_HORIZON = 1.5           #1.5
+        self.N = 27                   #50
+        self.T_HORIZON = 0.7           #1.5
         self.dt = self.T_HORIZON / self.N  # Step size
 
         # Initialize state variables    
