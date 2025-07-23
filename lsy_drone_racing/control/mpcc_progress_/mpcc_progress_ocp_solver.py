@@ -2,7 +2,7 @@
 from __future__ import annotations
 import numpy as np
 from acados_template import AcadosOcp, AcadosOcpSolver
-from lsy_drone_racing.control.mpcc_progress_utils.mpcc_progress_quadrotor_ode_model import export_quadrotor_ode_model
+from lsy_drone_racing.control.mpcc_progress_.mpcc_progress_quadrotor_ode_model import export_quadrotor_ode_model
 from lsy_drone_racing.control.helper.costfunction import contour_and_lag_error
 from casadi import DM, sum1
 
@@ -11,7 +11,7 @@ from ml_collections import ConfigDict
 def create_ocp_solver(
     Tf: float,
     N: int,
-    mpc_cfg: ConfigDict,   # ← hier dein Config‐Objekt
+    mpc_cfg: ConfigDict,  
     verbose: bool = False
 ) -> tuple[AcadosOcpSolver, AcadosOcp]:
     
@@ -56,10 +56,6 @@ def create_ocp_solver(
     mu = mcfg.mu # progress 0.0015 
     q_min = p[6]  # gaussian weight
 
-    # # Maximum progress velocity for real world deployment, flies stable in real about 6/10 in sim
-    # max_v_theta = 0.14  # maximum progress velocity
-    # Maximum progress velocity for simulation, flies stable in sim about 8/10
-    # max_v_theta = 0.13  # maximum progress velocity
     max_v_theta = mpc_cfg.max_v_theta  # maximum progress velocity from config
     
     dv_theta_max = 0.35  # maximum progress acceleration
@@ -85,7 +81,6 @@ def create_ocp_solver(
     ocp.constraints.ubx = np.array([0.55, 0.55, 1, 0.9, 1.57, max_v_theta])
     ocp.constraints.idxbx = np.array([9, 10, 11, 12, 13, 15])
 
-    # add a limit for the progress acceleration dv_theta_cmd
     
     ocp.constraints.lbu = np.array([-dv_theta_max])
     ocp.constraints.ubu = np.array([dv_theta_max])

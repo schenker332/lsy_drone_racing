@@ -10,7 +10,7 @@ import numpy as np
 import toml
 from ml_collections import ConfigDict
 from scipy.spatial.transform import Rotation as R
-from lsy_drone_racing.control.rest.controller import Controller
+from lsy_drone_racing.control.controller import Controller
 from typing import List 
 
 if TYPE_CHECKING:

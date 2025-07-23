@@ -4,10 +4,8 @@
 # | :-----------------: | :-----------------------: | :-------------------------: | :-------------------: |
 # | `level2.toml`       | **Yes**                   | **Yes**                     | Learning, re-planning |
 [controller]
-file = "mpcc_curv_1.py" # Put your controller file name here. Specifying a controller as argument to scripts will override this setting. Controllers are located in `lsy_drone_racing/control/`
-#mpcc_curv_0.py
-#mpcc_progress.py
-#mpcc_curv_1.py
+file = "mpcc_progress.py" # Put your controller file name here. Specifying a controller as argument to scripts will override this setting. Controllers are located in `lsy_drone_racing/control/`
+
 
 [deploy]
 ### Settings only relevant for deployment

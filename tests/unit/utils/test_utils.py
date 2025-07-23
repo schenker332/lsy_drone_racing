@@ -5,7 +5,7 @@ import pytest
 from ml_collections import ConfigDict
 from scipy.spatial.transform import Rotation as R
 
-from lsy_drone_racing.control.rest.controller import Controller
+from lsy_drone_racing.control.controller import Controller
 from lsy_drone_racing.envs.utils import gate_passed
 from lsy_drone_racing.utils import load_config, load_controller
 

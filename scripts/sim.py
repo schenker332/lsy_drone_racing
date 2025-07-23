@@ -6,7 +6,6 @@ Run as:
 
 Look for instructions in `README.md` and in the official documentation.
 """
-
 from __future__ import annotations
 import logging
 from pathlib import Path
@@ -14,40 +13,22 @@ from typing import TYPE_CHECKING
 import fire
 import gymnasium
 from gymnasium.wrappers.jax_to_numpy import JaxToNumpy
-import time
-import sys
-
-sys.path.append(str(Path(__file__).parent.parent / "plots"))
-from plot_speed import plot_speed
-# from plots.plot_speed import plot_speed
-
-
-from lsy_drone_racing.utils import  load_config, load_controller, draw_gates, draw_point, draw_obstacles, generate_parallel_lines,draw_line
+import csv
+import tomli
+from lsy_drone_racing.utils import  load_config, load_controller
 from lsy_drone_racing.utils.visualizer import SimVisualizer
 
 if TYPE_CHECKING:
-    from ml_collections import ConfigDict
+    
 
-    from lsy_drone_racing.control.rest.controller import Controller
+    from lsy_drone_racing.control.controller import Controller
     from lsy_drone_racing.envs.drone_race import DroneRaceEnv
 logger = logging.getLogger(__name__)
 import warnings
 warnings.filterwarnings("ignore", message="Explicitly requested dtype float64.*")
 
-from datetime import datetime
-import os
-import csv
-from lsy_drone_racing.control.helper.datalogger import DataLogger
-from ml_collections import ConfigDict             # <<--- hier richtig importieren
-### ======================= Logger ======================== ###
-timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-batch_dir = Path("logs") / f"batch_{timestamp}"
-batch_dir.mkdir(parents=True, exist_ok=True)    
+from ml_collections import ConfigDict
 
-run_stats = []          # hier sammeln wir später Zeit + Gates pro Run
-successful_times = []   # für die Erfolgs‑Durchschnittszeit
-### ======================================================== ###
-import tomli
 def load_mpc_config(config_dir: Path) -> ConfigDict:
     """
     Lädt 'config/mpc.toml' und gibt den Unter-Abschnitt [mpc] zurück.
@@ -66,8 +47,6 @@ def simulate(
     controller: str | None = None,
     n_runs: int = 1,
     gui: bool | None = None,
-    param_overrides: dict[str, float] | None = None,
-    return_stats: bool = False
 ) -> list[float]:
     """Evaluate the drone controller over multiple episodes.
 
@@ -83,31 +62,15 @@ def simulate(
     """
     project_root = Path(__file__).parents[1]
     config_dir   = project_root / "config"
-
-    # 1) Umgebungs‑Config einmalig laden
     config = load_config(config_dir / config)
-
-    # 2) MPC‑Parameter hinzufügen
     config.mpc = load_mpc_config(config_dir)
 
-    # 3) GUI‑Override (falls vom CLI übergeben)
     if gui is not None:
         config.sim.gui = gui
 
-    # 4) Controller‑Klasse ermitteln
     control_path   = project_root / "lsy_drone_racing" / "control"
     ctrl_filename  = controller or config.controller.file
     controller_cls = load_controller(control_path / ctrl_filename)
-
-    # 1.2) Parameter‑Overrides anwenden
-    if param_overrides:
-        for k, v in param_overrides.items():
-            if hasattr(config.mpc, k):
-                setattr(config.mpc, k, v)
-            else:
-                raise KeyError(f"Unknown MPC parameter: {k}")
-            
-            
 
     
     # Create the racing environment
@@ -125,35 +88,15 @@ def simulate(
     )
     env = JaxToNumpy(env)
 
-
     ep_times    = []
-    total_gates = len(config.env.track.gates)
+
     try:
-        for run_idx in range(1, n_runs + 1):          # ← jetzt mit Index
+        for _ in range(n_runs):
 
             obs, info = env.reset()
 
-            default_mass   = env.unwrapped.drone_mass.item()          
-            current_mass   = env.unwrapped.sim.data.params.mass.item()  
-            mass_deviation = current_mass - default_mass
-            # print(f"Drone mass – Default: {default_mass:.6f}, Deviation: {mass_deviation:.6f}, Total: {current_mass:.6f}")
 
             controller: Controller = controller_cls(obs, info, config)
-
-            ### ======================== Logger ======================== ###
-            run_dir = batch_dir / f"run_{run_idx}"
-            run_dir.mkdir(exist_ok=True)
-            if getattr(controller, "logger", None):
-                logger = controller.logger
-                logger.run_dir = str(run_dir)
-                logger.state_log_file = run_dir / "state_log.csv"
-                logger.control_log_file = run_dir / "control_log.csv"
-                logger.gates_log_file = run_dir / "final_gates.csv"
-                logger.obstacles_log_file = run_dir / "final_obstacles.csv"
-                logger._prepare_state_log()
-                logger._prepare_control_log()
-            ### ======================================================== ###
-
             visualizer = SimVisualizer()
             i = 0
 
@@ -175,72 +118,13 @@ def simulate(
                     break
                 i += 1
 
-
             log_episode_stats(obs, info, config, curr_time)
             controller.episode_reset()
             visualizer.reset_episode()  # Reset visualizer for next episode
-
-            ### ======================== Logger ======================== ###
-            if controller.logger:
-                controller.logger.log_final_positions(
-                    gates_pos=controller._info.get("gates_pos"),
-                    obstacles_pos=controller._info.get("obstacles_pos")
-                )
-                controller.logger.close()
-
-            # Wenn Episode fertig:
-            gates_passed = obs["target_gate"]
-            if gates_passed == -1:
-                gates_passed = len(config.env.track.gates)
-
-            run_stats.append({"run": run_idx,
-                            "time": curr_time,
-                            "gates_passed": gates_passed,
-                            "mass": current_mass})
-
-            if gates_passed == len(config.env.track.gates):
-                successful_times.append(curr_time)
-
-
-
-            ep_times.append(curr_time if gates_passed == total_gates else None)
-            plot_speed(run_dir)
-            ### ======================================================== ###
-
-
-        ### ======================== Logger ======================== ###
-
-
-
-        summary_file = batch_dir / "summary.csv"
-        with open(summary_file, "w", newline="") as f:
-            writer = csv.writer(f)
-            writer.writerow(["run", "time_sec", "gates_passed", "mass"])
-
-            for row in run_stats:
-                writer.writerow([row["run"], f"{row['time']:.3f}", row["gates_passed"], f"{row['mass']:.3f}"])
-
-            # Aggregierte Kennzahlen
-            successful_runs = len(successful_times)
-            avg_time = (sum(successful_times) / successful_runs) if successful_runs else None
-
-            writer.writerow([])  # Leerzeile als Trenner
-            writer.writerow(["successful_runs", successful_runs])
-            writer.writerow(["avg_time_successful", f"{avg_time:.3f}" if avg_time else "n/a"])
-        ### ======================================================== ###
-
-
     finally:
-        # Sicherstellen, dass die Umgebung immer ordnungsgemäß geschlossen wird
         env.close()
-        print("Umgebung erfolgreich geschlossen.")
 
-        
-    if return_stats:
-        return run_stats
-    else:
-        return ep_times
-
+    return ep_times
 
 
 def log_episode_stats(obs: dict, info: dict, config: ConfigDict, curr_time: float):
@@ -254,10 +138,7 @@ def log_episode_stats(obs: dict, info: dict, config: ConfigDict, curr_time: floa
     )
 
 
-
-
 if __name__ == "__main__":
-
 
     logging.basicConfig()
     logging.getLogger("lsy_drone_racing").setLevel(logging.INFO)

@@ -53,9 +53,7 @@ def export_quadrotor_ode_model():
     y_ref_next = SX.sym("y_ref_next") #4
     z_ref_next = SX.sym("z_ref_next") #5
     weight = SX.sym("weight")  # Weight for minimum distance to trajectory #6
-    x_ref_min = SX.sym("x_ref_min") #7
-    y_ref_min = SX.sym("y_ref_min") #8
-    z_ref_min = SX.sym("z_ref_min") #9
+
 
     
 
@@ -75,8 +73,7 @@ def export_quadrotor_ode_model():
     
     p = vertcat(x_ref, y_ref, z_ref, # 0, 1, 2
                  x_ref_next, y_ref_next, z_ref_next, # 3, 4, 5
-                   weight, x_ref_min, y_ref_min, # 6, 7, 8
-                   z_ref_min) # 9
+                   weight) # 6
 
     # System dynamics
     f_expl = vertcat(

@@ -6,9 +6,8 @@ from scipy.spatial.transform import Rotation as R
 from lsy_drone_racing.control import Controller
 if TYPE_CHECKING:
     from numpy.typing import NDArray
-from lsy_drone_racing.control.mpcc_curv_1_utils.mpcc_curv_1_ocp_solver import create_ocp_solver
-from lsy_drone_racing.control.helper.print_output import print_output
-from lsy_drone_racing.control.helper.datalogger import DataLogger
+from lsy_drone_racing.control.mpcc_curv_.mpcc_curv_ocp_solver import create_ocp_solver
+
 
 
 
@@ -175,14 +174,6 @@ class MPController(Controller):
         self.freq = config.env.freq
         self._tick = 0
 
-        ### ======================== Logger ======================== ###
-        self.logging_enabled = True
-        if  self.logging_enabled:
-            self.logger = DataLogger()
-            self._last_log_time = -1
-        else:
-            self.logger = None
-        ### ======================================================== ###
 
         # MPC parameters
         self.N = mcfg.N                   # Number of discretization steps
@@ -231,9 +222,7 @@ class MPController(Controller):
         # Automatische Gate-Thetas basierend auf berechneten Indizes
         self.gate_thetas = [ts[i] for i in gate_indices]
 
-         # Extract peax wewights and peak sigmas from the configuration
-        # self.gate_peak_weights = [GATE_WEIGHT_CONFIG[i]["peak_weight"] for i in range(4)]
-        # self.gate_sigmas = [GATE_WEIGHT_CONFIG[i]["sigma"] for i in range(4)]
+
         self.gate_peak_weights = [mcfg.peak_weight, mcfg.peak_weight, mcfg.peak_weight, mcfg.peak_weight] 
         self.gate_sigmas = [mcfg.sigma, mcfg.sigma, mcfg.sigma, mcfg.sigma]
 
@@ -268,35 +257,7 @@ class MPController(Controller):
         xcurrent = np.concatenate((obs["pos"], obs["vel"],  R.from_quat(obs["quat"]).as_euler("xyz", degrees=False), [self.last_f_collective, self.last_f_cmd], self.last_rpy_cmd) )
         
 
-        ### ======================== Logger ======================== ###
-        # Log state vector every 0.1 seconds
-        if self.logger:
-            current_time = self._tick / self.freq
-            # nur alle 0.01 s loggen
-            if current_time - self._last_log_time >= 0.01:
-                ref_pt = np.array([self.cs_x(self.theta), self.cs_y(self.theta), self.cs_z(self.theta)])
-                u1 = self.acados_ocp_solver.get(1, "u")
-
-
-                kappa = self.curvature(self.theta)
-                self.logger.log_state(current_time, xcurrent, u1, ref_point=ref_pt, curvature=kappa, v_theta=self.v_theta)
-                self._last_log_time = current_time
-
-
-                # current_weight = self.weight_for_theta(self.theta)
-                # vis_data = self.get_contour_lag_error(obs["pos"])
-                # e_contour_magnitude = np.linalg.norm(vis_data['e_c_vec'])
-                # e_lag_magnitude = abs(vis_data['e_l_scalar'])
-                
-                # # Log weight data with actual error values    
-                # self.logger.log_weight_data(
-                #     current_time, 
-                #     current_weight,
-                #     e_contour=e_contour_magnitude,
-                #     e_lag=e_lag_magnitude
-                # )
-
-        ### ======================================================== ###
+  
                 
         self.acados_ocp_solver.set(0, "lbx", xcurrent)
         self.acados_ocp_solver.set(0, "ubx", xcurrent)
