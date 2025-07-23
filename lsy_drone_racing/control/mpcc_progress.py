@@ -35,7 +35,7 @@ class MPController(Controller):
         ### ====================================================================== ###
         ### =========================== Waypoints ================================ ###
         ### ====================================================================== ###
-        mcfg = config.mpc
+
         # Gate-Posittions better for simulation
         gates = np.array([
             [0.45, -0.50, 0.56],  # Gate 0      [0.45, -0.5, 0.56]
@@ -195,7 +195,7 @@ class MPController(Controller):
 
 
         self.theta = 0.0  # Current theta value (progress along trajectory)
-        t= mcfg.t_scaling
+        t= 5.4526315789473685
         self.v_theta = 1/ (t * self.dt * self.freq) ## from niclas with 6 or 7
 
         dx   = self.cs_x.derivative(1)
@@ -219,7 +219,7 @@ class MPController(Controller):
 
 
         # self.gate_peak_weights = [GATE_WEIGHT_CONFIG[i]["peak_weight"] for i in range(4)]
-        self.gate_peak_weights = [mcfg.peak_weight, mcfg.peak_weight, mcfg.peak_weight, mcfg.peak_weight]  
+        self.gate_peak_weights = [500, 500, 500, 500]  # Use fixed peak weights for now
         self.gate_sigmas = [GATE_WEIGHT_CONFIG[i]["sigma"] for i in range(4)]
 
 
@@ -228,12 +228,11 @@ class MPController(Controller):
         self.acados_ocp_solver, self.ocp = create_ocp_solver(
             self.T_HORIZON,
             self.N,
-            config.mpc,       # ← übergib hier dein ConfigDict mit max_v_theta etc.
             verbose=False
         )
 
 
-        self.base_weight = mcfg.base_weight  # Base weight for the cost function  
+        self.base_weight = 10
         
 
 

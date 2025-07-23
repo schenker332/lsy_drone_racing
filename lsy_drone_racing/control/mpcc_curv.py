@@ -34,7 +34,7 @@ class MPController(Controller):
         """
         super().__init__(obs, info, config)
         # Hol dir die beiden Werte
-        mcfg = config.mpc
+
 
         
         ### ====================================================================== ###
@@ -176,8 +176,8 @@ class MPController(Controller):
 
 
         # MPC parameters
-        self.N = mcfg.N                   # Number of discretization steps
-        self.T_HORIZON = mcfg.T_HORIZON   # Time horizon in seconds
+        self.N = 27                 # Number of discretization steps
+        self.T_HORIZON = 0.7  # Time horizon in seconds
         self.dt = self.T_HORIZON / self.N  # Step size
 
         # Initialize state variables    
@@ -197,7 +197,7 @@ class MPController(Controller):
 
 
         self.theta = 0
-        t= mcfg.t_scaling
+        t= 5.4526315789473685
         self.v_theta = 1/ (t * self.dt * self.freq) 
 
         dx   = self.cs_x.derivative(1)
@@ -216,23 +216,22 @@ class MPController(Controller):
         
 
         self.curvature = curvature
-        self.alpha_curv_speed = mcfg.alpha_curv_speed    
+        self.alpha_curv_speed = 0.11111111111111112
         self.base_v_theta = self.v_theta
 
         # Automatische Gate-Thetas basierend auf berechneten Indizes
         self.gate_thetas = [ts[i] for i in gate_indices]
 
 
-        self.gate_peak_weights = [mcfg.peak_weight, mcfg.peak_weight, mcfg.peak_weight, mcfg.peak_weight] 
-        self.gate_sigmas = [mcfg.sigma, mcfg.sigma, mcfg.sigma, mcfg.sigma]
+        self.gate_peak_weights = [500, 500, 500, 500]  # Beispielwerte für Gate-Peak-Gewichte
+        self.gate_sigmas = [0.04, 0.04, 0.04, 0.04]
 
-        self.base_weight = mcfg.base_weight 
+        self.base_weight = 10
 
         # Create the optimal control problem solver
         self.acados_ocp_solver, self.ocp = create_ocp_solver(
             self.T_HORIZON,
             self.N,
-            config.mpc,       # ← übergib hier dein ConfigDict mit max_v_theta etc.
             verbose=False
         )
 

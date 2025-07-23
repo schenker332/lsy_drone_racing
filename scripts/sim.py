@@ -29,17 +29,6 @@ warnings.filterwarnings("ignore", message="Explicitly requested dtype float64.*"
 
 from ml_collections import ConfigDict
 
-def load_mpc_config(config_dir: Path) -> ConfigDict:
-    """
-    Lädt 'config/mpc.toml' und gibt den Unter-Abschnitt [mpc] zurück.
-    """
-    toml_path = config_dir / "mpc.toml"
-    if not toml_path.exists():
-        raise FileNotFoundError(f"mpc.toml nicht gefunden unter {toml_path}")
-    with open(toml_path, "rb") as f:
-        raw = tomli.load(f)
-    return ConfigDict(raw["mpc"])  # jetzt funktioniert ConfigDict
-
 
 
 def simulate(
@@ -63,7 +52,7 @@ def simulate(
     project_root = Path(__file__).parents[1]
     config_dir   = project_root / "config"
     config = load_config(config_dir / config)
-    config.mpc = load_mpc_config(config_dir)
+
 
     if gui is not None:
         config.sim.gui = gui

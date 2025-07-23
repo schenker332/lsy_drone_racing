@@ -7,11 +7,10 @@ from lsy_drone_racing.control.helper.costfunction import contour_and_lag_error
 from casadi import DM, sum1
 
 
-from ml_collections import ConfigDict
+
 def create_ocp_solver(
     Tf: float,
     N: int,
-    mpc_cfg: ConfigDict,  
     verbose: bool = False
 ) -> tuple[AcadosOcpSolver, AcadosOcp]:
     
@@ -27,7 +26,7 @@ def create_ocp_solver(
     """
 
     ocp = AcadosOcp()
-    mcfg = mpc_cfg  # MPC configuration from the config file
+
     # Set up the dynamic model
     ocp.model = export_quadrotor_ode_model()
     ocp.json_file = f"{ocp.model.name}.json"
@@ -52,11 +51,11 @@ def create_ocp_solver(
     
 
 
-    q_l = mcfg.q_l  # Lag error weight
-    mu = mcfg.mu # progress 0.0015 
+    q_l = 20
+    mu = 0.008
     q_min = p[6]  # gaussian weight
 
-    max_v_theta = mpc_cfg.max_v_theta  # maximum progress velocity from config
+    max_v_theta = 0.17
     
     dv_theta_max = 0.35  # maximum progress acceleration
 

@@ -1,4 +1,4 @@
-[mpc]
+[mpcc]
 
 t_scaling        = 5.4526315789473685
 alpha_curv_speed = 0.11111111111111112
@@ -8,3 +8,4 @@ peak_weight = 500.0
 
 max_v_theta = 0.13
 mu = 0.008
+

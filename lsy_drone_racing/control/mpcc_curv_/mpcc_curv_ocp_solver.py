@@ -11,7 +11,6 @@ from ml_collections import ConfigDict
 def create_ocp_solver(
     Tf: float,
     N: int,
-    mpc_cfg: ConfigDict,   # ← hier dein Config‐Objekt
     verbose: bool = False
 ) -> tuple[AcadosOcpSolver, AcadosOcp]:
     """Create an optimal control problem solver for the quadrotor MPC.
@@ -26,7 +25,7 @@ def create_ocp_solver(
     """
 
     ocp = AcadosOcp()
-    mcfg = mpc_cfg 
+
     # Set up the dynamic model
     ocp.model = export_quadrotor_ode_model()
     ocp.json_file = f"{ocp.model.name}.json"
@@ -50,7 +49,7 @@ def create_ocp_solver(
     e_c, e_l= contour_and_lag_error(ocp.model)
 
 
-    q_l = mcfg.q_l
+    q_l = 70
     q_c_gauss = p[6]  
 
     # Inputs
