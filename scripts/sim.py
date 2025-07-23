@@ -15,7 +15,11 @@ import fire
 import gymnasium
 from gymnasium.wrappers.jax_to_numpy import JaxToNumpy
 import time
-from plots.plot_speed import plot_speed
+import sys
+
+sys.path.append(str(Path(__file__).parent.parent / "plots"))
+from plot_speed import plot_speed
+# from plots.plot_speed import plot_speed
 
 
 from lsy_drone_racing.utils import  load_config, load_controller, draw_gates, draw_point, draw_obstacles, generate_parallel_lines,draw_line

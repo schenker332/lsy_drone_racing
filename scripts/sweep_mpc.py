@@ -21,10 +21,14 @@ from scripts.sim import simulate
 
 def sweep(
     param_ranges: list[str] = [
-        "peak_weight:400:600:15 ",
-        "sigma:0.0005:0.004:15"
+       "t_scaling:5.3:6.0:8",  # t_scaling from 4.0 to 6.0 in 5 steps
+        "N:15:30:11",
+        "t_horizon:0.4:0.9:6",
+        "peak_weight:300:600:6",
+        "sigma:0.001:0.02:11",
     ],
-    runs_per_val: int      = 100,
+
+    runs_per_val: int      = 20,
     config: str            = "level2.toml",
     controller: str | None = None,
     gui: bool | None       = False,
@@ -57,11 +61,12 @@ def sweep(
 
         # sweep loop
         for combo in combos:
-            overrides = {
-                k: (int(v) if k == "N" else float(v))
-                for k, v in zip(keys, combo)
-            }
-
+            overrides = {}
+            for i, k in enumerate(keys):
+                if k == "N":
+                    overrides[k] = int(combo[i])
+                else:
+                    overrides[k] = float(combo[i])
             print(f"→ Sweeping with {overrides}")
 
             # simulate returns List[{"run", "gates_passed", "time", ...}, ...]

@@ -8,8 +8,15 @@ from lsy_drone_racing.control.mpcc_curv_0_utils.mpcc_curv_0_quadrotor_ode_model 
 from lsy_drone_racing.control.helper.costfunction import contour_and_lag_error
 from casadi import DM, sum1, exp
 
+from ml_collections import ConfigDict
 
-def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosOcpSolver, AcadosOcp]:
+def create_ocp_solver(
+    Tf: float,
+    N: int,
+    mpc_cfg: ConfigDict,  
+    
+    verbose: bool = False
+) -> tuple[AcadosOcpSolver, AcadosOcp]:
     """Create an Optimal Control Problem (OCP) solver for the quadrotor MPC.
 
     This function sets up the OCP with the quadrotor's dynamic model,
@@ -25,6 +32,7 @@ def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosO
         A tuple containing the AcadosOcpSolver instance and the AcadosOcp object.
     """
     ocp = AcadosOcp()
+    mcfg = mpc_cfg 
 
     # Set up the dynamic model from the exported model file
     ocp.model = export_quadrotor_ode_model()
@@ -52,7 +60,8 @@ def create_ocp_solver(Tf: float, N: int, verbose: bool = False) -> tuple[AcadosO
     # --- Cost Function Weights ---
 
     q_c = 90 # contour error weight
-    q_l = 60.0  # Weight for the lag error (progress along the path)
+    # q_l = 60.0  # Weight for the lag error (progress along the path)
+    q_l = mcfg.q_l
 
     # The contouring error weight is set as an online parameter in the model/controller
     theta_spec_cont_weight = p[6]

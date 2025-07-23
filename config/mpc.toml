@@ -5,13 +5,12 @@ alpha_curv_speed = 0.08
 
 base_weight = 50.0
 peak_weight = 400.0
-sigma = 0.002
+sigma = 0.012400000000000001
 
 max_v_theta = 0.17
 mu = 0.008
 
-
-N = 27
+N = 22
 T_HORIZON = 0.7
 
 q_l = 20.0

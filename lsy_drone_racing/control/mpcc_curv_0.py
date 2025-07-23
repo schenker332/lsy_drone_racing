@@ -24,10 +24,10 @@ GATE_ORTHOGONAL_CONFIG = {
 # Set peak weights for the Gaussian-like cost function around each gate]
 # Set individual sigma values for each gate (controls the width of the Gaussian peak); 0.01 5% is of the norm scale
 GATE_WEIGHT_CONFIG = {
-    0: {"peak_weight": 500, "sigma": 0.04},   # Gate 0: narrow peak
-    1: {"peak_weight": 500, "sigma": 0.04}, # Gate 1: wider peak  
-    2: {"peak_weight": 500, "sigma": 0.04},  # Gate 2: narrow peak
-    3: {"peak_weight": 500, "sigma": 0.04}  # Gate 3: very narrow, high peak
+    0: {"peak_weight": 500, "sigma": 0.012},   # Gate 0: narrow peak
+    1: {"peak_weight": 500, "sigma": 0.012}, # Gate 1: wider peak  
+    2: {"peak_weight": 500, "sigma": 0.012},  # Gate 2: narrow peak
+    3: {"peak_weight": 500, "sigma": 0.012}  # Gate 3: very narrow, high peak
 }
 
 V_THETA_MAX = 0.13  # Base rate of progress, can be adjusted dynamically
@@ -282,7 +282,6 @@ class MPController(Controller):
 
             "o2": [  # Obstacle 2 mapping
                 ("b3_1.0", 1.0, 1.0, 0.0, [0.0, 0.0, 0.0]),
-                ("g2", 0.5, 0.5, 1.0, [0.0, 0.0, 0.0]),
             ],
 
             "o3": [
@@ -315,8 +314,12 @@ class MPController(Controller):
         ### ======================================================== ###
 
         # --- MPC Parameters ---
-        self.N = 20  # Number of discretization steps in the horizon
-        self.T_HORIZON = 0.6  # Time horizon in seconds
+        # self.N = 20  # Number of discretization steps in the horizon
+        # self.T_HORIZON = 0.6  # Time horizon in seconds
+        self.N = mcfg.N                   # Number of discretization steps
+        self.T_HORIZON = mcfg.T_HORIZON   # Time horizon in seconds
+
+
         self.dt = self.T_HORIZON / self.N  # Step size
 
         # --- Initial State Variables ---
@@ -414,18 +417,35 @@ class MPController(Controller):
                     
                 self.gate_thetas.append(theta_center)
 
-         # Extract peax wewights and peak sigmas from the configuration
-        # self.gate_peak_weights = [GATE_WEIGHT_CONFIG[i]["peak_weight"] for i in range(4)]
-        self.gate_peak_weights = [mcfg.peak_weight, mcfg.peak_weight, mcfg.peak_weight, mcfg.peak_weight]  
-        self.gate_sigmas = [GATE_WEIGHT_CONFIG[i]["sigma"] for i in range(4)]
-
-        # --- OCP Solver Setup ---
-        self.acados_ocp_solver, self.ocp = create_ocp_solver(self.T_HORIZON, self.N)
 
         # --- Contouring Cost Weighting ---
         # Base weight for the contouring error cost
-        self.base_weight = 10
+        self.base_weight = mcfg.base_weight
+
+         # Extract peak weights and peak sigmas from the configuration
+	    # self.gate_peak_weights = [GATE_WEIGHT_CONFIG[i]["peak_weight"] for i in range(4)]
+        self.gate_peak_weights = [mcfg.peak_weight for i in range(4)]
+        self.gate_sigmas = [mcfg.sigma for i in range(4)]
+        # self.gate_sigmas = [GATE_WEIGHT_CONFIG[i]["sigma"] for i in range(4)]
+
+        
+        # self.base_weight = 130.0
         # Sigma for the Gaussian-like weight distribution around gates
+
+        self.base_weight = mcfg.base_weight 
+
+        # --- OCP Solver Setup ---
+        # self.acados_ocp_solver, self.ocp = create_ocp_solver(self.T_HORIZON, self.N)
+        ## testing:
+        # Create the optimal control problem solver
+        self.acados_ocp_solver, self.ocp = create_ocp_solver(
+            self.T_HORIZON,
+            self.N,
+            config.mpc,       # ← übergib hier dein ConfigDict mit max_v_theta etc.
+            verbose=False
+        )
+
+        
 
     def compute_control(
         self, obs: dict[str, NDArray[np.floating]], info: dict | None = None
@@ -504,7 +524,7 @@ class MPController(Controller):
 
         kappa = self.curvature(self.theta)
 
-        self.v_theta = self.base_v_theta / (1 + self.alpha_curv_speed * kappa)
+        self.v_theta = max(self.base_v_theta / (1 + self.alpha_curv_speed * kappa), 0.17)
 
 
 
