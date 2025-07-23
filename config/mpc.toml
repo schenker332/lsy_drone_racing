@@ -1,16 +1,10 @@
 [mpc]
 
 t_scaling        = 5.4526315789473685
-alpha_curv_speed = 0.08
+alpha_curv_speed = 0.11111111111111112
 
-base_weight = 50.0
-peak_weight = 400.0
-sigma = 0.002
+base_weight = 10.0
+peak_weight = 500.0
 
-max_v_theta = 0.17
+max_v_theta = 0.13
 mu = 0.008
-
-N = 27
-T_HORIZON = 0.7
-
-q_l = 20.0

@@ -1,94 +1,70 @@
 name: Online Competition
 
 on:
-  push:
-    branches: [main, master]
-  workflow_dispatch:
+  push:
+    branches:
+      - master
+      - main
+  workflow_dispatch:
+
 
 jobs:
-  online-competition:
-    # 👉 Skip on upstream repo – nur auf deinem Fork laufen lassen
-    if: ${{ github.repository != 'utiasDSL/lsy_drone_racing' }}
-    runs-on: ubuntu-latest
+  online-competition:
+    # Skip this job if running on the main repo to prevent failing CI/CD. Only run on student forks.
+    if: ${{ github.repository != 'utiasDSL/lsy_drone_racing' }}
 
-    env:
-      KAGGLE_USERNAME: ${{ secrets.KaggleUsername }}
-      KAGGLE_KEY: ${{ secrets.KaggleKey }}
+    runs-on: ubuntu-latest
+    env: # Or as an environment variable
+      KAGGLE_USERNAME: ${{ secrets.KaggleUsername }}
+      KAGGLE_KEY: ${{ secrets.KaggleKey }}
 
-    steps:
-      ############################################################
-      # ---- Quellcode holen ------------------------------------#
-      ############################################################
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive   # <-- acados-Submodul gleich mitklonen
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mamba-org/setup-micromamba@v1
+        with:
+          micromamba-version: '2.1.0-0' # any version from https://github.com/mamba-org/micromamba-releases
+          environment-name: test-env
+          init-shell: bash
+          create-args: python=3.12
+          cache-environment: true
+      - name: Install ACADOS with Python interface
+        run: |
+          git clone https://github.com/acados/acados.git
+          cd acados
+          git checkout tags/v0.5.0
+          git submodule update --recursive --init
 
-      ############################################################
-      # ---- Micromamba-Umgebung --------------------------------#
-      ############################################################
-      - uses: mamba-org/setup-micromamba@v1
-        with:
-          micromamba-version: "2.1.0-0"
-          environment-name: test-env
-          init-shell: bash
-          create-args: python=3.12
-          cache-environment: true
+          mkdir -p build
+          cd build
+          cmake -DACADOS_WITH_QPOASES=ON ..
+          cmake .. -DACADOS_WITH_QPOASES=ON #-DCMAKE_INSTALL_PREFIX=$GITHUB_WORKSPACE/acados_install
+          make install -j$(nproc)
 
-      ############################################################
-      # ---- Projekt-Abhängigkeiten -----------------------------#
-      ############################################################
-      - name: Install Python package (inkl. online_submission & tests)
-        run: pip install .[online_submission,test]
-        shell: micromamba-shell {0}
+          # Install acados Python interface
+          cd ../interfaces/acados_template
+          pip install .
+        shell: micromamba-shell {0}
 
-      ############################################################
-      # ---- acados vorbereiten ---------------------------------#
-      ############################################################
-      - name: Download tera_renderer (non-interactive)
-        run: |
-          mkdir -p acados/bin
-          curl -L https://github.com/acados/tera_renderer/releases/download/v0.0.34/t_renderer-v0.0.34-linux \
-            -o acados/bin/t_renderer
-          chmod +x acados/bin/t_renderer
-        shell: micromamba-shell {0}
+      - name: Export ACADOS Paths
+        run: |
+          echo "ACADOS_SOURCE_DIR=${GITHUB_WORKSPACE}/acados" >> $GITHUB_ENV
+          echo "LD_LIBRARY_PATH=${GITHUB_WORKSPACE}/acados/lib:$LD_LIBRARY_PATH" >> $GITHUB_ENV
+          echo "${GITHUB_WORKSPACE}/acados/interfaces/acados_template" >> $GITHUB_PATH
+        shell: bash
 
-      - name: Build acados (Release)
-        run: |
-          sudo apt-get update && sudo apt-get install -y build-essential cmake
-          cd acados
-          mkdir -p build && cd build
-          cmake .. \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DACADOS_WITH_QPOASES=ON \
-            -DACADOS_WITH_OPENMP=OFF \
-            -DACADOS_INSTALL_DIR=$GITHUB_WORKSPACE/acados
-          make -j$(nproc)
-          make install            # installiert nach $GITHUB_WORKSPACE/acados
-        shell: micromamba-shell {0}
-
-      ############################################################
-      # ---- acados_template installieren -----------------------#
-      ############################################################
-      - name: Install acados_template
-        run: pip install ./acados/interfaces/acados_template
-        shell: micromamba-shell {0}
-
-      ############################################################
-      # ---- Umgebungsvariablen für Python ----------------------#
-      ############################################################
-      - name: Export acados env vars
-        run: |
-          echo "ACADOS_SOURCE_DIR=$GITHUB_WORKSPACE/acados" >> $GITHUB_ENV
-          echo "LD_LIBRARY_PATH=$GITHUB_WORKSPACE/acados/lib:\$LD_LIBRARY_PATH" >> $GITHUB_ENV
-        shell: bash              # env-Vars müssen im Aufrufer-Shell gesetzt werden
-
-      ############################################################
-      # ---- Simulation + Submission ----------------------------#
-      ############################################################
-      - name: Run simulation tests (kaggle.py)
-        run: python scripts/kaggle.py
-        shell: micromamba-shell {0}
-
-      - name: Export submission to Kaggle
-        run: kaggle competitions submit -c lsy-drone-racing-ss-25 -f submission.csv -m "Automated submission"
-        shell: micromamba-shell {0}
+        # ACADOS dependency
+      - name: Download tera_renderer
+        run: |
+          mkdir -p acados/bin
+          curl -L https://github.com/acados/tera_renderer/releases/download/v0.0.34/t_renderer-v0.0.34-linux \
+            -o acados/bin/t_renderer
+          chmod +x acados/bin/t_renderer
+        shell: micromamba-shell {0}
+      - run: pip install .[online_submission,test]
+        shell: micromamba-shell {0}
+      - name: Run simulation tests
+        run: python scripts/kaggle.py
+        shell: micromamba-shell {0}
+      - name: Export with kaggle
+        run: kaggle competitions submit -c lsy-drone-racing-ss-25 -f submission.csv -m "Automated submission"
+        shell: micromamba-shell {0}
