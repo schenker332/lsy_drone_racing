@@ -55,7 +55,7 @@ def create_ocp_solver(
     mu = 0.008
     q_min = p[6]  # gaussian weight
 
-    max_v_theta = 0.17
+    max_v_theta = 0.13
     
     dv_theta_max = 0.35  # maximum progress acceleration
 

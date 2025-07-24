@@ -175,8 +175,8 @@ class MPController(Controller):
 
 
         # MPC parameters
-        self.N = 27                   #50
-        self.T_HORIZON = 0.7           #1.5
+        self.N = 50                   #50
+        self.T_HORIZON = 1.5           #1.5
         self.dt = self.T_HORIZON / self.N  # Step size
 
         # Initialize state variables    
