@@ -30,10 +30,19 @@ dependencies = [
     "packaging >= 24.0",
     "crazyflow >= 0.0.1",
     "jax >0.5,<0.6",
+    "tomli>=2.0.1
 ]
 
+test = [
+    "pytest>=8.0.0",
+    "pyinstrument",
+    "gymnasium[array-api]",
+    "array-api-compat>=1.4.0",
+    "tomli>=2.0.1"
+]
+
+
 [project.optional-dependencies]
-test = ["pytest>=8.0.0", "pyinstrument"]
 online_submission = ["pandas", "kaggle"]
 gpu = ["crazyflow[gpu]"]
 deploy = ["cflib"]
