@@ -14,10 +14,10 @@ from lsy_drone_racing.control.mpcc_curv_.mpcc_curv_ocp_solver import create_ocp_
 # Set peak weights for the Gaussian-like cost function around each gate]
 # Set individual sigma values for each gate (controls the width of the Gaussian peak); 0.01 5% is of the norm scale
 GATE_WEIGHT_CONFIG = {
-    0: {"peak_weight": 500, "sigma": 0.02},   # Gate 0: narrow peak
-    1: {"peak_weight": 300, "sigma": 0.02}, # Gate 1: wider peak  
-    2: {"peak_weight": 300, "sigma": 0.02},  # Gate 2: narrow peak
-    3: {"peak_weight": 300, "sigma": 0.02}  # Gate 3: very narrow, high peak
+    0: {"peak_weight": 400, "sigma": 0.0124},   # Gate 0: narrow peak
+    1: {"peak_weight": 400, "sigma": 0.0124}, # Gate 1: wider peak  
+    2: {"peak_weight": 400, "sigma": 0.0124},  # Gate 2: narrow peak
+    3: {"peak_weight": 400, "sigma": 0.0124}  # Gate 3: very narrow, high peak
 }
 
 
@@ -176,8 +176,8 @@ class MPController(Controller):
 
 
         # MPC parameters
-        self.N = 27                 # Number of discretization steps
-        self.T_HORIZON = 0.7  # Time horizon in seconds
+        self.N = 22                 # Number of discretization steps
+        self.T_HORIZON = 0.7        # Time horizon in seconds
         self.dt = self.T_HORIZON / self.N  # Step size
 
         # Initialize state variables    
@@ -216,17 +216,17 @@ class MPController(Controller):
         
 
         self.curvature = curvature
-        self.alpha_curv_speed = 0.11111111111111112
+        self.alpha_curv_speed = 0.08
         self.base_v_theta = self.v_theta
 
         # Automatische Gate-Thetas basierend auf berechneten Indizes
         self.gate_thetas = [ts[i] for i in gate_indices]
 
 
-        self.gate_peak_weights = [500, 500, 500, 500]  # Beispielwerte für Gate-Peak-Gewichte
-        self.gate_sigmas = [0.04, 0.04, 0.04, 0.04]
+        self.gate_peak_weights = [GATE_WEIGHT_CONFIG[i]["peak_weight"] for i in range(4)]
+        self.gate_sigmas = [GATE_WEIGHT_CONFIG[i]["sigma"] for i in range(4)]
 
-        self.base_weight = 10
+        self.base_weight = 50
 
         # Create the optimal control problem solver
         self.acados_ocp_solver, self.ocp = create_ocp_solver(

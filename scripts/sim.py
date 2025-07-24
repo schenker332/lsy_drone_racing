@@ -14,7 +14,6 @@ import fire
 import gymnasium
 from gymnasium.wrappers.jax_to_numpy import JaxToNumpy
 import csv
-import tomli
 from lsy_drone_racing.utils import  load_config, load_controller
 from lsy_drone_racing.utils.visualizer import SimVisualizer
 
