@@ -44,13 +44,10 @@ Extended the [CrazyFlow](https://github.com/utiasDSL/crazyflow) simulator with r
   <em>Left: MPCC — faster but crashes more often in dynamic environments. &nbsp; Right: MPCCC — more robust curvature-aware speed control.</em>
 </p>
 
-### Simulation
+### Videos
 
-<video src="https://github.com/schenker332/lsy_drone_racing/raw/main/media/Sim.mov" controls width="700"></video>
-
-### Real-World Flight
-
-<video src="https://github.com/schenker332/lsy_drone_racing/raw/main/media/Flight.mp4" controls width="700"></video>
+[![Project Demo](media/MPCCC.png)](https://schenker332.github.io/lsy_drone_racing/media/)
+*Click to open the project page with simulation and real-world flight videos.*
 
 ---
 

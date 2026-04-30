@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Autonomous Drone Racing — MPCC & MPCCC</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0d1117;
+      color: #e6edf3;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 48px 24px 80px;
+    }
+
+    h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .subtitle {
+      color: #8b949e;
+      font-size: 1rem;
+      margin-bottom: 40px;
+    }
+
+    h2 {
+      font-size: 1.2rem;
+      font-weight: 600;
+      margin: 40px 0 12px;
+      color: #79c0ff;
+    }
+
+    p {
+      color: #c9d1d9;
+      line-height: 1.7;
+      margin-bottom: 16px;
+    }
+
+    .results-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0 32px;
+      font-size: 0.95rem;
+    }
+
+    .results-table th {
+      background: #161b22;
+      color: #8b949e;
+      font-weight: 600;
+      padding: 10px 16px;
+      text-align: left;
+      border-bottom: 1px solid #30363d;
+    }
+
+    .results-table td {
+      padding: 10px 16px;
+      border-bottom: 1px solid #21262d;
+    }
+
+    .results-table tr:last-child td { border-bottom: none; }
+
+    .highlight { color: #3fb950; font-weight: 600; }
+
+    .images {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin: 16px 0;
+    }
+
+    .images figure {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .images img {
+      width: 100%;
+      display: block;
+    }
+
+    .images figcaption {
+      padding: 8px 12px;
+      font-size: 0.82rem;
+      color: #8b949e;
+      text-align: center;
+    }
+
+    .video-wrap {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      overflow: hidden;
+      margin: 12px 0 32px;
+    }
+
+    .video-wrap video {
+      width: 100%;
+      display: block;
+    }
+
+    .report-link {
+      display: inline-block;
+      margin-top: 8px;
+      padding: 8px 18px;
+      background: #21262d;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      color: #79c0ff;
+      text-decoration: none;
+      font-size: 0.9rem;
+    }
+
+    .report-link:hover { background: #30363d; }
+
+    footer {
+      margin-top: 64px;
+      padding-top: 24px;
+      border-top: 1px solid #21262d;
+      color: #8b949e;
+      font-size: 0.85rem;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Autonomous Drone Racing</h1>
+  <p class="subtitle">From MPCC to MPCCC &nbsp;·&nbsp; Niclas Schenk &amp; Maximilian Christof &nbsp;·&nbsp; Technical University of Munich</p>
+
+  <p>
+    This project develops and compares two Model Predictive Contouring Control strategies for agile autonomous drone racing
+    in dynamic, randomized environments. The baseline <strong>MPCC</strong> uses a progress reward for aggressive flight,
+    while the novel <strong>MPCCC</strong> replaces it with curvature-based speed adaptation for improved robustness.
+  </p>
+
+  <a class="report-link" href="ADR_Project_Report_Niclas_Schenk_Maximilian_Christof.pdf" target="_blank">
+    Read the full report (PDF)
+  </a>
+
+  <h2>Results</h2>
+
+  <table class="results-table">
+    <thead>
+      <tr>
+        <th>Controller</th>
+        <th>Mean Time</th>
+        <th>Variance</th>
+        <th>Pass Rate</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>MPCC</td>
+        <td>4.98 s</td>
+        <td>0.0302</td>
+        <td>51%</td>
+      </tr>
+      <tr>
+        <td>MPCCC</td>
+        <td>5.93 s</td>
+        <td>0.0015</td>
+        <td><span class="highlight">75%</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Flight Trajectories</h2>
+
+  <div class="images">
+    <figure>
+      <img src="MPCC.png" alt="MPCC top-down trajectories" />
+      <figcaption>MPCC — faster but less reliable in dynamic environments</figcaption>
+    </figure>
+    <figure>
+      <img src="MPCCC.png" alt="MPCCC top-down trajectories" />
+      <figcaption>MPCCC — curvature-aware speed control, 75% pass rate</figcaption>
+    </figure>
+  </div>
+
+  <h2>Simulation</h2>
+
+  <div class="video-wrap">
+    <video src="Sim.mov" controls></video>
+  </div>
+
+  <h2>Real-World Flight</h2>
+
+  <div class="video-wrap">
+    <video src="Flight.mp4" controls></video>
+  </div>
+
+  <footer>
+    Autonomous Drone Racing Project Course &nbsp;·&nbsp; TUM &nbsp;·&nbsp;
+    <a href="https://github.com/schenker332/lsy_drone_racing" style="color:#79c0ff;">GitHub Repository</a>
+  </footer>
+
+</body>
+</html>
