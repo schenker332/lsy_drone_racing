@@ -12,10 +12,10 @@ from lsy_drone_racing.control.mpcc_progress_.mpcc_progress_ocp_solver import cre
 
 # Sigma defines how much we stretch the Peak weights at each gate
 GATE_WEIGHT_CONFIG = {
-    0: {"peak_weight": 300, "sigma": 0.04},  # Gate 0: narrow peak
-    1: {"peak_weight": 300, "sigma": 0.04},  # Gate 1: wider peak
-    2: {"peak_weight": 300, "sigma": 0.04},  # Gate 2: narrow peak
-    3: {"peak_weight": 300, "sigma": 0.04}  # Gate 3: very narrow, high peak
+    0: {"peak_weight": 500, "sigma": 0.04},  # Gate 0: narrow peak
+    1: {"peak_weight": 500, "sigma": 0.04},  # Gate 1: wider peak
+    2: {"peak_weight": 500, "sigma": 0.04},  # Gate 2: narrow peak
+    3: {"peak_weight": 500, "sigma": 0.04}  # Gate 3: very narrow, high peak
 }
 
 
@@ -218,11 +218,10 @@ class MPController(Controller):
         self.gate_thetas = [ts[i] for i in gate_indices]
 
 
-        # self.gate_peak_weights = [GATE_WEIGHT_CONFIG[i]["peak_weight"] for i in range(4)]
-        self.gate_peak_weights = [500, 500, 500, 500]  # Use fixed peak weights for now
+        self.gate_peak_weights = [GATE_WEIGHT_CONFIG[i]["peak_weight"] for i in range(4)]
         self.gate_sigmas = [GATE_WEIGHT_CONFIG[i]["sigma"] for i in range(4)]
 
-
+        self.base_weight = 10
 
         # Create the optimal control problem solver
         self.acados_ocp_solver, self.ocp = create_ocp_solver(
@@ -232,7 +231,7 @@ class MPController(Controller):
         )
 
 
-        self.base_weight = 10
+        
         
 
 
