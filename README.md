@@ -26,19 +26,23 @@ Extended the [CrazyFlow](https://github.com/utiasDSL/crazyflow) simulator with r
 
 ### Results
 
+<div align="center">
+
 | Controller | Mean Time | Variance | Pass Rate |
 |:----------:|:---------:|:--------:|:---------:|
 | MPCC       | 4.98 s    | 0.0302   | 51%       |
 | MPCCC      | 5.93 s    | 0.0015   | **75%**   |
+
+</div>
 
 *Evaluated over 100 simulation runs at Level 2 (full randomization: mass, gates, obstacles). Both controllers were also successfully deployed on a real Crazyflie drone using Vicon motion capture.*
 
 ### Visualizations
 
 <p align="center">
-  <img src="media/MPCC.png" width="48%" alt="MPCC top-down flight trajectories"/>
-  &nbsp;
-  <img src="media/MPCCC.png" width="48%" alt="MPCCC top-down flight trajectories"/>
+  <img src="media/MPCC.png" height="340" alt="MPCC top-down flight trajectories"/>
+  &nbsp;&nbsp;
+  <img src="media/MPCCC.png" height="340" alt="MPCCC top-down flight trajectories"/>
 </p>
 <p align="center">
   <em>Left: MPCC — faster but crashes more often in dynamic environments. &nbsp; Right: MPCCC — more robust curvature-aware speed control.</em>
@@ -48,11 +52,11 @@ Extended the [CrazyFlow](https://github.com/utiasDSL/crazyflow) simulator with r
 
 <p align="center">
   <a href="https://schenker332.github.io/lsy_drone_racing/sim.html">
-    <img src="media/sim.png" width="48%" alt="Watch simulation video"/>
+    <img src="media/sim.png" height="260" alt="Watch simulation video"/>
   </a>
-  &nbsp;
+  &nbsp;&nbsp;
   <a href="https://schenker332.github.io/lsy_drone_racing/flight.html">
-    <img src="media/Flight.png" width="48%" alt="Watch real-world flight video"/>
+    <img src="media/Flight.png" height="260" alt="Watch real-world flight video"/>
   </a>
 </p>
 <p align="center">
