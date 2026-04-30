@@ -46,8 +46,18 @@ Extended the [CrazyFlow](https://github.com/utiasDSL/crazyflow) simulator with r
 
 ### Videos
 
-[![Project Demo](media/MPCCC.png)](https://schenker332.github.io/lsy_drone_racing/media/)
-*Click to open the project page with simulation and real-world flight videos.*
+<p align="center">
+  <a href="https://schenker332.github.io/lsy_drone_racing/media/#simulation">
+    <img src="media/sim.png" width="48%" alt="Watch simulation video"/>
+  </a>
+  &nbsp;
+  <a href="https://schenker332.github.io/lsy_drone_racing/media/#real-world-flight">
+    <img src="media/Flight.png" width="48%" alt="Watch real-world flight video"/>
+  </a>
+</p>
+<p align="center">
+  <em>Left: click to watch simulation &nbsp;·&nbsp; Right: click to watch real-world flight</em>
+</p>
 
 ---
 
