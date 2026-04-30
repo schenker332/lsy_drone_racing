@@ -28,6 +28,8 @@ jobs:
         run: |
           mkdir pages_content
           cp media/index.html pages_content/
+          cp media/sim.html pages_content/
+          cp media/flight.html pages_content/
           cp media/*.png pages_content/
 
       - name: Upload artifact
