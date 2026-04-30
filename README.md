@@ -6,7 +6,7 @@
 
 ---
 
-## My Contribution — MPCC & MPCCC Controllers
+## Our Contribution — MPCC & MPCCC Controllers
 
 > **Authors:** Niclas Schenk & Maximilian Christof · Technical University of Munich
 > **Report:** [ADR_Project_Report_Niclas_Schenk_Maximilian_Christof.pdf](media/ADR_Project_Report_Niclas_Schenk_Maximilian_Christof.pdf)
