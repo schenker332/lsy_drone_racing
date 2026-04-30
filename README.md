@@ -46,11 +46,11 @@ Extended the [CrazyFlow](https://github.com/utiasDSL/crazyflow) simulator with r
 
 ### Simulation
 
-https://github.com/schenker332/lsy_drone_racing/raw/main/media/Sim.mov
+<video src="https://github.com/schenker332/lsy_drone_racing/raw/main/media/Sim.mov" controls width="700"></video>
 
 ### Real-World Flight
 
-https://github.com/schenker332/lsy_drone_racing/raw/main/media/Flight.mp4
+<video src="https://github.com/schenker332/lsy_drone_racing/raw/main/media/Flight.mp4" controls width="700"></video>
 
 ---
 
