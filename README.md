@@ -4,6 +4,56 @@
 </p>
 <sub><sup>AI generated image</sup></sub>
 
+---
+
+## My Contribution — MPCC & MPCCC Controllers
+
+> **Authors:** Niclas Schenk & Maximilian Christof · Technical University of Munich
+> **Report:** [ADR_Project_Report_Niclas_Schenk_Maximilian_Christof.pdf](media/ADR_Project_Report_Niclas_Schenk_Maximilian_Christof.pdf)
+
+This fork contains the controller implementations and simulation extensions developed as a student project for the Autonomous Drone Racing course at TUM. Starting from the course framework, we designed and evaluated two Model Predictive Contouring Control strategies for agile drone racing through dynamic, randomized environments.
+
+### What we built
+
+**1. MPCC — Model Predictive Contouring Control (Baseline)**
+A contouring controller with an explicit progress reward in the cost function to incentivize aggressive, high-speed flight. Achieves fast lap times but is sensitive to sudden trajectory updates.
+
+**2. MPCCC — Model Predictive Contouring *Curvature* Control (Novel)**
+Our main contribution. Removes the progress reward entirely and instead modulates the virtual reference speed `v_θ` based on upcoming trajectory curvature `κ(θ)`. This preemptive speed reduction makes the controller more robust in tight corners while maintaining high speeds on straight sections.
+
+**3. Simulation visualization extensions**
+Extended the [CrazyFlow](https://github.com/utiasDSL/crazyflow) simulator with real-time overlays for development and debugging: predicted MPC horizon trajectory, actual flown path, contouring/lag error display, and dynamic Gaussian gate weight visualization.
+
+### Results
+
+| Controller | Mean Time | Variance | Pass Rate |
+|:----------:|:---------:|:--------:|:---------:|
+| MPCC       | 4.98 s    | 0.0302   | 51%       |
+| MPCCC      | 5.93 s    | 0.0015   | **75%**   |
+
+*Evaluated over 100 simulation runs at Level 2 (full randomization: mass, gates, obstacles). Both controllers were also successfully deployed on a real Crazyflie drone using Vicon motion capture.*
+
+### Visualizations
+
+<p align="center">
+  <img src="media/MPCC.png" width="48%" alt="MPCC top-down flight trajectories"/>
+  &nbsp;
+  <img src="media/MPCCC.png" width="48%" alt="MPCCC top-down flight trajectories"/>
+</p>
+<p align="center">
+  <em>Left: MPCC — faster but crashes more often in dynamic environments. &nbsp; Right: MPCCC — more robust curvature-aware speed control.</em>
+</p>
+
+### Simulation
+
+https://github.com/schenker332/lsy_drone_racing/raw/main/media/Sim.mov
+
+### Real-World Flight
+
+https://github.com/schenker332/lsy_drone_racing/raw/main/media/Flight.mp4
+
+---
+
 [![Python Version]][Python Version URL] [![Ruff Check]][Ruff Check URL] [![Documentation Status]][Documentation Status URL] [![Tests]][Tests URL]
 
 [Python Version]: https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue
